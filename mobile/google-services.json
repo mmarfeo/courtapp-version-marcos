@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "850411481241",
+    "project_id": "courtup-39488",
+    "storage_bucket": "courtup-39488.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:850411481241:android:7286de6e987d962ba93008",
+        "android_client_info": {
+          "package_name": "com.nicoexpo2025.mobile"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAELETl9OG47L-V0YOB6Ex_oIUz0Pe1dLI"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

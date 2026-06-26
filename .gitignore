@@ -1,0 +1,37 @@
+# Dependencies
+web/node_modules/
+node_modules/
+
+# Next.js
+web/.next/
+web/out/
+
+# Environment
+web/.env.local
+.env
+.env.local
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+
+# Supabase
+supabase/.temp/
+
+# Notas Locales Privadas
+LOCAL_DEV_GUIDE.md
+
+# Scripts de desarrollo local
+web/fetch_clases.js
+web/fetch_clases_raw.js
+web/recalcular_deuda.js
+web/scratch/
+web/admin/
+web/chat/
+web/notifications/
+web/pagos/
+web/webhooks/
