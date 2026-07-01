@@ -7,7 +7,7 @@ import Link from 'next/link';
 import {
   Trophy, LogOut, ChevronDown, Loader2, User, Shield, GraduationCap,
   LayoutDashboard, MapPin, Calendar, BookOpen, Menu, X, LayoutGrid,
-  ChevronLeft, ChevronRight, Sun, Moon, Plus, List, BarChart3, Home, Grid3X3, Wallet, Landmark
+  ChevronLeft, ChevronRight, Sun, Moon, Plus, List, BarChart3, Home, Grid3X3, Wallet, Landmark, MessageCircle
 } from 'lucide-react';
 import ThreeBall from './ThreeBall';
 
@@ -168,7 +168,7 @@ export default function Sidebar() {
         if (newRole === 'SuperAdmin') router.push('/admin/dashboard');
         else if (newRole === 'Organizador') router.push('/organizador/torneos/nuevo');
         else if (newRole === 'Profesor') router.push('/profesor/agenda');
-        else router.push('/torneos');
+        else router.push('/jugador/chat');
       }, 600);
     } catch (err) { console.error(err); setSwitchingRole(false); }
   };
@@ -231,6 +231,7 @@ export default function Sidebar() {
       items.push({ label: 'Publicar Clase', href: '/profesor/clases/nueva', icon: <GraduationCap size={20} /> });
       items.push({ label: 'Mis Pagos', href: '/profesor/pagos', icon: <Wallet size={20} /> });
     } else if (profile.rol === 'Jugador') {
+      items.push({ label: 'Chat', href: '/jugador/chat', icon: <MessageCircle size={20} /> });
       items.push({ label: 'Inicio', href: '/jugador/dashboard', icon: <Home size={20} /> });
       items.push({ label: 'Torneos', href: '/torneos', icon: <Trophy size={20} /> });
       items.push({ label: 'Alquiler', href: '/alquiler', icon: <Grid3X3 size={20} /> });

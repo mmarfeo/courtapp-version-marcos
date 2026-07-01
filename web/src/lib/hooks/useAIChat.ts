@@ -73,11 +73,12 @@ async function saveToDb(role: string, content: string, token: string): Promise<s
   }
 }
 
-async function loadFromDb(token: string): Promise<AIChatMessage[]> {
+async function loadFromDb(token: string, before?: string): Promise<AIChatMessage[]> {
   try {
-    const res = await fetch('/api/ai/chat-history?limit=50', {
-      headers: { Authorization: `Bearer ${token}` },
-    });
+    const url = before
+      ? `/api/ai/chat-history?limit=50&before=${before}`
+      : '/api/ai/chat-history?limit=50';
+    const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
     if (!res.ok) return [];
     const { messages } = await res.json();
     return (messages ?? []).map((m: any) => ({
@@ -94,7 +95,10 @@ async function loadFromDb(token: string): Promise<AIChatMessage[]> {
 export function useAIChat() {
   const [messages, setMessages] = useState<AIChatMessage[]>(loadLocalMessages);
   const [status, setStatus] = useState<AgentStatus>({ type: 'idle' });
+  const [syncing, setSyncing] = useState(false);
+  const [hasMore, setHasMore] = useState(false);
   const abortControllerRef = useRef<AbortController | null>(null);
+  const oldestIdRef = useRef<string | null>(null);
 
   const isLoading = status.type !== 'idle' && status.type !== 'error';
 
@@ -108,12 +112,29 @@ export function useAIChat() {
     (async () => {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session?.access_token) return;
+      setSyncing(true);
       const remote = await loadFromDb(session.access_token);
+      setSyncing(false);
       if (remote.length > 0) {
         setMessages(remote);
+        setHasMore(remote.length === 50);
+        oldestIdRef.current = remote[0]?.id ?? null;
       }
     })();
   }, []);
+
+  const loadMore = useCallback(async () => {
+    if (!hasMore || !oldestIdRef.current) return;
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session?.access_token) return;
+    setSyncing(true);
+    const older = await loadFromDb(session.access_token, oldestIdRef.current);
+    setSyncing(false);
+    if (older.length === 0) { setHasMore(false); return; }
+    setHasMore(older.length === 50);
+    oldestIdRef.current = older[0]?.id ?? null;
+    setMessages(prev => [...older, ...prev]);
+  }, [hasMore]);
 
   const sendMessage = useCallback(
     async (userText: string) => {
@@ -247,5 +268,5 @@ export function useAIChat() {
     setStatus({ type: 'idle' });
   }, []);
 
-  return { messages, status, isLoading, sendMessage, clearMessages, stopGeneration };
+  return { messages, status, isLoading, syncing, hasMore, loadMore, sendMessage, clearMessages, stopGeneration };
 }
