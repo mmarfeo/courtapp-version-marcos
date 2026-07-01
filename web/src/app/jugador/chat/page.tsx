@@ -246,28 +246,26 @@ export default function JugadorChatPage() {
           <div ref={messagesEndRef} />
         </div>
 
-        {/* Acciones rápidas (solo sin mensajes) */}
-        {messages.length === 0 && !syncing && (
-          <div className="px-4 pb-2 shrink-0">
-            <p className="text-[10px] font-bold text-[var(--text-muted)] uppercase tracking-widest mb-2">Acciones rápidas</p>
-            <div className="flex flex-wrap gap-2">
-              {QUICK_ACTIONS.map((action) => {
-                const Icon = action.icon;
-                return (
-                  <button
-                    key={action.label}
-                    onClick={() => handleQuickAction(action.msg)}
-                    disabled={isLoading}
-                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold border border-[var(--border)] bg-[var(--surface-secondary)] text-[var(--foreground)] hover:border-[var(--primary)] hover:text-[var(--primary)] hover:bg-[var(--primary)]/5 transition-all disabled:opacity-50"
-                  >
-                    <Icon size={12} className="text-[var(--primary)]" />
-                    {action.label}
-                  </button>
-                );
-              })}
-            </div>
+        {/* Acciones rápidas — siempre visibles */}
+        <div className="px-4 pt-2 pb-1 shrink-0 border-t border-[var(--border)]/50">
+          <div className="flex flex-wrap gap-2">
+            {QUICK_ACTIONS.map((action) => {
+              const Icon = action.icon;
+              return (
+                <button
+                  key={action.label}
+                  onClick={() => handleQuickAction(action.msg)}
+                  disabled={isLoading}
+                  type="button"
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold border border-[var(--border)] bg-[var(--surface-secondary)] text-[var(--foreground)] hover:border-[var(--primary)] hover:text-[var(--primary)] hover:bg-[var(--primary)]/5 transition-all disabled:opacity-50"
+                >
+                  <Icon size={12} className="text-[var(--primary)]" />
+                  {action.label}
+                </button>
+              );
+            })}
           </div>
-        )}
+        </div>
 
         {/* Input */}
         <div className="shrink-0 border-t border-[var(--border)] bg-[var(--surface)] px-4 py-3">
