@@ -26,11 +26,12 @@ export default function JugadorLayout() {
         },
       }}
     >
+      {/* Chat como pantalla principal (home) */}
       <Tabs.Screen
-        name="inicio"
+        name="chat"
         options={{
-          title: 'Inicio',
-          tabBarIcon: ({ color, size }) => <Ionicons name="home-outline" size={size} color={color} />,
+          title: 'Chat',
+          tabBarIcon: ({ color, size }) => <Ionicons name="chatbubbles-outline" size={size} color={color} />,
         }}
       />
       <Tabs.Screen
@@ -55,12 +56,11 @@ export default function JugadorLayout() {
         }}
       />
       <Tabs.Screen
-        name="torneo/[id]"
-        options={{ href: null }}
-      />
-      <Tabs.Screen
-        name="inscripcion/[id]"
-        options={{ href: null }}
+        name="dashboard"
+        options={{
+          title: 'Inicio',
+          tabBarIcon: ({ color, size }) => <Ionicons name="home-outline" size={size} color={color} />,
+        }}
       />
       <Tabs.Screen
         name="perfil"
@@ -69,6 +69,12 @@ export default function JugadorLayout() {
           tabBarIcon: ({ color, size }) => <Ionicons name="person-outline" size={size} color={color} />,
         }}
       />
+
+      {/* Rutas ocultas de la navegación */}
+      <Tabs.Screen name="torneo/[id]" options={{ href: null }} />
+      <Tabs.Screen name="inscripcion/[id]" options={{ href: null }} />
+      <Tabs.Screen name="inicio" options={{ href: null }} />
+      <Tabs.Screen name="asistente" options={{ href: null }} />
     </Tabs>
   );
 }

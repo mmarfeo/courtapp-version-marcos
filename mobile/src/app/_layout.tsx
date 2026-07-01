@@ -118,7 +118,7 @@ function RootLayoutContent() {
         break;
       case 'jugador':
       default:
-        router.replace('/(jugador)/inicio');
+        router.replace('/(jugador)/chat');
         break;
     }
   }, [user, loading]);

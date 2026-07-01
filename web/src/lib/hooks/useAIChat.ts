@@ -24,45 +24,103 @@ const TOOL_LABELS: Record<string, string> = {
   consultar_profesores: 'Consultando profesores...',
   consultar_mis_clases: 'Consultando tus clases...',
   reservar_clase: 'Reservando clase...',
+  buscar_canchas_disponibles: 'Buscando canchas disponibles...',
+  crear_reserva_cancha: 'Creando tu reserva...',
+  cancelar_reserva_cancha: 'Cancelando reserva...',
+  listar_mis_reservas_cancha: 'Cargando tus reservas...',
+  buscar_torneos: 'Buscando torneos...',
+  inscribir_torneo: 'Inscribiéndote...',
 };
 
 const STORAGE_KEY = 'courtup_chat_messages';
 
-function loadMessages(): AIChatMessage[] {
+function loadLocalMessages(): AIChatMessage[] {
   if (typeof window === 'undefined') return [];
   try {
-    const raw = sessionStorage.getItem(STORAGE_KEY);
+    // Migrar de sessionStorage a localStorage si hay mensajes viejos
+    const old = sessionStorage.getItem(STORAGE_KEY);
+    if (old) {
+      localStorage.setItem(STORAGE_KEY, old);
+      sessionStorage.removeItem(STORAGE_KEY);
+    }
+    const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return [];
-    const parsed = JSON.parse(raw);
-    return parsed.map((m: AIChatMessage) => ({ ...m, timestamp: new Date(m.timestamp) }));
+    return JSON.parse(raw).map((m: AIChatMessage) => ({ ...m, timestamp: new Date(m.timestamp) }));
   } catch {
     return [];
   }
 }
 
-function saveMessages(msgs: AIChatMessage[]) {
+function saveLocalMessages(msgs: AIChatMessage[]) {
   if (typeof window === 'undefined') return;
   try {
-    sessionStorage.setItem(STORAGE_KEY, JSON.stringify(msgs));
+    // Guardar máximo 200 mensajes en localStorage
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(msgs.slice(-200)));
+  } catch { /* quota exceeded */ }
+}
+
+async function saveToDb(role: string, content: string, token: string): Promise<string | null> {
+  try {
+    const res = await fetch('/api/ai/chat-history', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ role, content }),
+    });
+    const data = await res.json();
+    return data?.id ?? null;
   } catch {
-    // storage quota exceeded — ignore
+    return null;
+  }
+}
+
+async function loadFromDb(token: string): Promise<AIChatMessage[]> {
+  try {
+    const res = await fetch('/api/ai/chat-history?limit=50', {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!res.ok) return [];
+    const { messages } = await res.json();
+    return (messages ?? []).map((m: any) => ({
+      id: m.id,
+      role: m.role as 'user' | 'assistant',
+      content: m.content,
+      timestamp: new Date(m.created_at),
+    }));
+  } catch {
+    return [];
   }
 }
 
 export function useAIChat() {
-  const [messages, setMessages] = useState<AIChatMessage[]>(loadMessages);
+  const [messages, setMessages] = useState<AIChatMessage[]>(loadLocalMessages);
   const [status, setStatus] = useState<AgentStatus>({ type: 'idle' });
   const abortControllerRef = useRef<AbortController | null>(null);
 
   const isLoading = status.type !== 'idle' && status.type !== 'error';
 
+  // Persistir en localStorage en cada cambio
   useEffect(() => {
-    saveMessages(messages);
+    saveLocalMessages(messages);
   }, [messages]);
+
+  // Sincronizar con DB al montar (en background)
+  useEffect(() => {
+    (async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.access_token) return;
+      const remote = await loadFromDb(session.access_token);
+      if (remote.length > 0) {
+        setMessages(remote);
+      }
+    })();
+  }, []);
 
   const sendMessage = useCallback(
     async (userText: string) => {
       if (!userText.trim() || isLoading) return;
+
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
 
       const userMessage: AIChatMessage = {
         id: `user-${Date.now()}`,
@@ -73,6 +131,9 @@ export function useAIChat() {
 
       setMessages((prev) => [...prev, userMessage]);
       setStatus({ type: 'thinking' });
+
+      // Guardar mensaje del usuario en DB (background)
+      if (token) saveToDb('user', userText.trim(), token);
 
       const assistantId = `assistant-${Date.now()}`;
       setMessages((prev) => [
@@ -88,12 +149,10 @@ export function useAIChat() {
           content: m.content,
         }));
 
-        const { data: { session } } = await supabase.auth.getSession();
-
         const response = await fetch('/api/ai/chat', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ messages: apiMessages, userToken: session?.access_token }),
+          body: JSON.stringify({ messages: apiMessages, userToken: token }),
           signal: abortControllerRef.current.signal,
         });
 
@@ -105,51 +164,50 @@ export function useAIChat() {
         const reader = response.body!.getReader();
         const decoder = new TextDecoder();
         let accumulated = '';
+        let buffer = '';
 
         while (true) {
           const { done, value } = await reader.read();
           if (done) break;
 
-          const chunk = decoder.decode(value, { stream: true });
-          const lines = chunk.split('\n');
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split('\n');
+          buffer = lines.pop() ?? '';
 
+          let currentEvent = '';
           for (const line of lines) {
             if (line.startsWith('event: ')) {
-              // next line has the data — handled below via pairing
-              continue;
-            }
-            if (!line.startsWith('data: ')) continue;
+              currentEvent = line.slice(7).trim();
+            } else if (line.startsWith('data: ')) {
+              let data = '';
+              try { data = JSON.parse(line.slice(6)); } catch { continue; }
 
-            // Find the event type from the preceding lines
-            const lineIdx = lines.indexOf(line);
-            const eventLine = lines[lineIdx - 1] ?? '';
-            const eventType = eventLine.startsWith('event: ')
-              ? eventLine.slice(7).trim()
-              : 'text';
-
-            let data = '';
-            try {
-              data = JSON.parse(line.slice(6));
-            } catch {
-              continue;
+              if (currentEvent === 'text') {
+                accumulated += data;
+                setMessages((prev) =>
+                  prev.map((m) => m.id === assistantId ? { ...m, content: accumulated } : m)
+                );
+              } else if (currentEvent === 'tool_start') {
+                setStatus({ type: 'querying', tool: TOOL_LABELS[data] || data });
+              } else if (currentEvent === 'tool_end') {
+                setStatus({ type: 'thinking' });
+              } else if (currentEvent === 'done') {
+                setStatus({ type: 'idle' });
+              } else if (currentEvent === 'error') {
+                throw new Error(data);
+              }
+              currentEvent = '';
             }
+          }
+        }
 
-            if (eventType === 'text') {
-              accumulated += data;
-              setMessages((prev) =>
-                prev.map((m) =>
-                  m.id === assistantId ? { ...m, content: accumulated } : m
-                )
-              );
-            } else if (eventType === 'tool_start') {
-              setStatus({ type: 'querying', tool: TOOL_LABELS[data] || data });
-            } else if (eventType === 'tool_end') {
-              setStatus({ type: 'thinking' });
-            } else if (eventType === 'done') {
-              setStatus({ type: 'idle' });
-            } else if (eventType === 'error') {
-              throw new Error(data);
-            }
+        // Guardar respuesta del asistente en DB y asignar id real
+        if (token && accumulated) {
+          const dbId = await saveToDb('assistant', accumulated, token);
+          if (dbId) {
+            setMessages((prev) =>
+              prev.map((m) => m.id === assistantId ? { ...m, id: dbId } : m)
+            );
           }
         }
 
@@ -162,20 +220,26 @@ export function useAIChat() {
         const msg = err instanceof Error ? err.message : 'Error al conectar con el asistente';
         setStatus({ type: 'error', message: msg });
         setMessages((prev) =>
-          prev.map((m) =>
-            m.id === assistantId ? { ...m, content: `⚠️ ${msg}` } : m
-          )
+          prev.map((m) => m.id === assistantId ? { ...m, content: `⚠️ ${msg}` } : m)
         );
       }
     },
     [messages, isLoading]
   );
 
-  const clearMessages = useCallback(() => {
+  const clearMessages = useCallback(async () => {
     abortControllerRef.current?.abort();
-    sessionStorage.removeItem(STORAGE_KEY);
+    localStorage.removeItem(STORAGE_KEY);
     setMessages([]);
     setStatus({ type: 'idle' });
+    // Borrar también en DB
+    const { data: { session } } = await supabase.auth.getSession();
+    if (session?.access_token) {
+      fetch('/api/ai/chat-history', {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${session.access_token}` },
+      }).catch(() => {});
+    }
   }, []);
 
   const stopGeneration = useCallback(() => {

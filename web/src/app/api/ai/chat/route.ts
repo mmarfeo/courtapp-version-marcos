@@ -1,6 +1,6 @@
 import { NextRequest } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
-import { SUPABASE_TOOLS, executeToolCall, ToolCall } from '@/lib/supabase-tools';
+import { TOOLS_JUGADOR, TOOLS_PROFESOR, TOOLS_ORGANIZADOR, executeToolCall, ToolCall } from '@/lib/supabase-tools';
 
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-flash-lite-latest';
@@ -8,7 +8,15 @@ const OLLAMA_BASE_URL = process.env.OLLAMA_URL || 'http://localhost:11434';
 const OLLAMA_MODEL = process.env.OLLAMA_MODEL || 'llama3.2:3b';
 const MAX_TOOL_ITERATIONS = 5;
 
-function buildSystemPrompt(): string {
+type Rol = 'Jugador' | 'Profesor' | 'Organizador' | 'SuperAdmin';
+
+function getToolsForRol(rol: Rol) {
+  if (rol === 'Organizador' || rol === 'SuperAdmin') return TOOLS_ORGANIZADOR;
+  if (rol === 'Profesor') return TOOLS_PROFESOR;
+  return TOOLS_JUGADOR;
+}
+
+function buildSystemPrompt(rol: Rol = 'Jugador'): string {
   const hoy = new Date().toLocaleDateString('es-AR', {
     timeZone: 'America/Argentina/Buenos_Aires',
     weekday: 'long',
@@ -23,25 +31,93 @@ function buildSystemPrompt(): string {
   manana.setDate(manana.getDate() + 1);
   const isoManana = manana.toISOString().split('T')[0];
 
-  return `Sos el asistente virtual de CourtUp, una plataforma de reserva de canchas de tenis y pádel en Argentina.
+  const base = `Sos el asistente virtual de CourtUp, una plataforma de gestión de clubes de tenis y pádel en Argentina.
 FECHA ACTUAL: ${hoy} (${isoHoy}). Mañana es ${isoManana}. Usá estas fechas cuando el usuario diga "hoy", "mañana", "esta semana", etc.
-
-HERRAMIENTAS DISPONIBLES Y CUÁNDO USARLAS:
-- consultar_canchas → cuando pregunten por canchas, precios de cancha, superficies
-- consultar_clases → cuando quieran VER qué clases hay disponibles, o necesites el ID para reservar
-- consultar_partidos → cuando pregunten por partidos organizados
-- consultar_reservas → SOLO para ver alquileres de canchas (no clases)
-- consultar_profesores → cuando pregunten por profesores
-- consultar_mis_clases → cuando el usuario pregunte por SUS clases ya reservadas o historial personal
-- reservar_clase → cuando el usuario quiera INSCRIBIRSE o RESERVAR una clase (primero llamá a consultar_clases para obtener el ID)
 
 REGLAS ESTRICTAS:
 - Respondé SOLO lo que se pregunta. Sin sugerencias extra.
-- Respuestas cortas y directas. Máximo 2 oraciones.
+- Respuestas cortas y directas. Máximo 2-3 oraciones.
 - Respondé en español argentino.
 - Si no hay datos, decilo en una sola oración.
-- Para reservar una clase: 1) llamá a consultar_clases para ver disponibilidad y obtener el ID, 2) llamá a reservar_clase con ese ID.
-- "Reservar una clase" y "reservar una cancha" son cosas distintas: para clases usá reservar_clase, para canchas decí que no está disponible esa función aún.`;
+- SIEMPRE pedí confirmación explícita antes de ejecutar acciones de creación, reserva o cancelación.
+- Para acciones destructivas (cancelar reservas, cancelar clases, cancelar inscripciones): confirmá con el usuario antes de ejecutar la tool.`;
+
+  const prompts: Record<Rol, string> = {
+    Jugador: `${base}
+
+ROL ACTUAL: Jugador
+HERRAMIENTAS Y CUÁNDO USARLAS:
+- buscar_canchas_disponibles → antes de reservar una cancha, para saber cuáles están libres
+- crear_reserva_cancha → cuando el usuario quiera reservar una cancha (pedir confirmación primero)
+- cancelar_reserva_cancha → para cancelar un alquiler (pedir confirmación explícita)
+- listar_mis_reservas_cancha → para ver las reservas de canchas del usuario
+- consultar_clases → para ver clases disponibles
+- reservar_clase → para inscribirse a una clase (primero consultar_clases para el ID)
+- cancelar_reserva_clase → para cancelar una clase reservada (pedir confirmación)
+- consultar_mis_clases → para ver las clases que el usuario ya tiene reservadas
+- buscar_torneos → para ver torneos disponibles
+- inscribir_torneo → para anotarse en un torneo (pedir confirmación)
+- cancelar_inscripcion_torneo → para cancelar inscripción (pedir confirmación)
+- ver_mis_partidos → para ver los partidos del usuario en torneos
+- consultar_profesores → para ver profesores disponibles
+- consultar_canchas → para ver información general de canchas y precios`,
+
+    Profesor: `${base}
+
+ROL ACTUAL: Profesor
+HERRAMIENTAS Y CUÁNDO USARLAS:
+- buscar_canchas_disponibles → antes de crear una clase, verificar disponibilidad
+- crear_clase → para crear una nueva clase (pedir confirmación primero)
+- listar_mis_clases_como_profesor → para ver las clases propias del profesor
+- ver_alumnos_clase → para ver quiénes están inscriptos en una clase
+- cancelar_clase → para cancelar una clase (notifica automáticamente a alumnos, pedir confirmación)
+- ver_mis_alquileres_como_profesor → para ver las canchas reservadas por el profesor
+- consultar_canchas → para ver canchas y precios
+- consultar_profesores → para ver otros profesores`,
+
+    Organizador: `${base}
+
+ROL ACTUAL: Organizador
+HERRAMIENTAS Y CUÁNDO USARLAS:
+- listar_todos_los_torneos → para ver todos los torneos con inscriptos
+- listar_inscripciones_torneo → para ver quién se inscribió en un torneo específico
+- consultar_disponibilidad_cancha → para ver el calendario de ocupación de una cancha
+- listar_todos_alquileres → para ver todos los alquileres del club
+- listar_profesores_y_deudas → para ver el estado de deudas de los profesores
+- ver_pagos_pendientes → para ver pagos sin confirmar (alquileres, clases, torneos)
+- consultar_clases → para ver todas las clases del club
+- consultar_canchas → para ver canchas y precios
+- consultar_profesores → para ver profesores`,
+
+    SuperAdmin: `${base}
+
+ROL ACTUAL: SuperAdmin (acceso total)
+Tenés las mismas herramientas que un Organizador más acceso completo a la plataforma.`,
+  };
+
+  return prompts[rol] ?? prompts['Jugador'];
+}
+
+async function getRolFromToken(token: string): Promise<Rol> {
+  try {
+    const url = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+    const key = process.env.SUPABASE_SERVICE_ROLE_KEY!;
+    if (!url || !key || url.includes('placeholder')) return 'Jugador';
+
+    const supabase = createClient(url, key, { auth: { autoRefreshToken: false, persistSession: false } });
+    const { data: { user } } = await supabase.auth.getUser(token);
+    if (!user) return 'Jugador';
+
+    const { data: perfil } = await supabase
+      .from('perfiles_usuarios')
+      .select('rol')
+      .eq('id', user.id)
+      .single();
+
+    return (perfil?.rol as Rol) ?? 'Jugador';
+  } catch {
+    return 'Jugador';
+  }
 }
 
 interface Message {
@@ -53,15 +129,12 @@ interface Message {
 }
 
 function sseEvent(controller: ReadableStreamDefaultController, event: string, data: string) {
-  controller.enqueue(
-    new TextEncoder().encode(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`)
-  );
+  controller.enqueue(new TextEncoder().encode(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`));
 }
-
-// ── Grok path: tool calling agent loop ──────────────────────────────────────
 
 async function runGeminiAgent(
   messages: Message[],
+  tools: typeof TOOLS_JUGADOR,
   send: (event: string, data: string) => void,
   controller: ReadableStreamDefaultController,
   userToken?: string
@@ -69,22 +142,12 @@ async function runGeminiAgent(
   for (let iteration = 0; iteration < MAX_TOOL_ITERATIONS; iteration++) {
     const res = await fetch('https://generativelanguage.googleapis.com/v1beta/openai/chat/completions', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${GEMINI_API_KEY}`,
-      },
-      body: JSON.stringify({
-        model: GEMINI_MODEL,
-        messages,
-        tools: SUPABASE_TOOLS,
-        tool_choice: 'auto',
-        stream: false,
-      }),
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${GEMINI_API_KEY}` },
+      body: JSON.stringify({ model: GEMINI_MODEL, messages, tools, tool_choice: 'auto', stream: false }),
     });
 
     if (!res.ok) {
-      // On auth/quota errors fall back to Ollama context mode
-      if (res.status === 401 || res.status === 402 || res.status === 403 || res.status === 429) {
+      if ([401, 402, 403, 429].includes(res.status)) {
         const userMessages = messages.filter((m) => m.role !== 'system');
         await runOllamaAgent(
           userMessages.map((m) => ({ role: m.role as string, content: m.content ?? '' })),
@@ -128,12 +191,7 @@ async function runGeminiAgent(
       const result = await executeToolCall(toolCall, userToken);
       console.log(`[AI] tool_result: ${toolCall.function.name} => ${result.substring(0, 200)}`);
       send('tool_end', toolCall.function.name);
-      messages.push({
-        role: 'tool',
-        tool_call_id: toolCall.id,
-        name: toolCall.function.name,
-        content: result,
-      });
+      messages.push({ role: 'tool', tool_call_id: toolCall.id, name: toolCall.function.name, content: result });
     }
   }
 
@@ -141,8 +199,6 @@ async function runGeminiAgent(
   send('done', '');
   controller.close();
 }
-
-// ── Ollama path: pre-fetch Supabase context + streaming ─────────────────────
 
 async function fetchSupabaseContext(): Promise<string> {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -153,27 +209,13 @@ async function fetchSupabaseContext(): Promise<string> {
   const hoy = new Date().toISOString().split('T')[0];
 
   const [canchas, profesores, clases, reservas] = await Promise.all([
-    supabase.from('canchas').select('id, nombre, deporte, superficie, precio_por_hora, activa, numero_cancha').eq('activa', true).order('numero_cancha'),
+    supabase.from('canchas').select('id, numero_cancha, deporte, superficie, precio_hora_dia, precio_hora_noche, activa').eq('activa', true).order('numero_cancha'),
     supabase.from('perfiles_usuarios').select('nombre, precio_clase_tenis, precio_clase_padel').eq('rol', 'Profesor'),
     supabase.from('clases_disponibles').select('fecha, hora_inicio, hora_fin, cupo_maximo, precio_clase, deporte, categoria_target, profesor:perfiles_usuarios!clases_disponibles_profesor_id_fkey(nombre)').eq('activa', true).gte('fecha', hoy).order('fecha').order('hora_inicio').limit(20),
-    supabase.from('alquileres_cancha').select('fecha, hora_inicio, hora_fin, estado_pago, cancha:canchas(nombre, numero_cancha)').eq('fecha', hoy).in('estado_pago', ['Aprobado', 'Pendiente']).order('hora_inicio'),
+    supabase.from('alquileres_cancha').select('fecha, hora_inicio, hora_fin, estado_pago, cancha:canchas(nombre_club, numero_cancha)').eq('fecha', hoy).in('estado_pago', ['Aprobado', 'Pendiente']).order('hora_inicio'),
   ]);
 
-  return `
-
-## DATOS ACTUALES DEL CLUB (fecha hoy: ${hoy}):
-
-### Canchas activas:
-${JSON.stringify(canchas.data ?? [], null, 2)}
-
-### Profesores:
-${JSON.stringify(profesores.data ?? [], null, 2)}
-
-### Próximas clases disponibles:
-${JSON.stringify(clases.data ?? [], null, 2)}
-
-### Reservas de hoy:
-${JSON.stringify(reservas.data ?? [], null, 2)}`;
+  return `\n\n## DATOS ACTUALES DEL CLUB (fecha hoy: ${hoy}):\n\n### Canchas activas:\n${JSON.stringify(canchas.data ?? [], null, 2)}\n\n### Profesores:\n${JSON.stringify(profesores.data ?? [], null, 2)}\n\n### Próximas clases:\n${JSON.stringify(clases.data ?? [], null, 2)}\n\n### Reservas de hoy:\n${JSON.stringify(reservas.data ?? [], null, 2)}`;
 }
 
 async function runOllamaAgent(
@@ -185,17 +227,12 @@ async function runOllamaAgent(
   const context = await fetchSupabaseContext();
   send('tool_end', 'consultar_canchas');
 
-  const systemWithContext = buildSystemPrompt() + context;
-
   const res = await fetch(`${OLLAMA_BASE_URL}/v1/chat/completions`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       model: OLLAMA_MODEL,
-      messages: [
-        { role: 'system', content: systemWithContext },
-        ...userMessages,
-      ],
+      messages: [{ role: 'system', content: buildSystemPrompt('Jugador') + context }, ...userMessages],
       stream: true,
     }),
   });
@@ -213,28 +250,20 @@ async function runOllamaAgent(
   while (true) {
     const { done, value } = await reader.read();
     if (done) break;
-
     const chunk = decoder.decode(value, { stream: true });
-    const lines = chunk.split('\n').filter((l) => l.startsWith('data: '));
-
-    for (const line of lines) {
+    for (const line of chunk.split('\n').filter((l) => l.startsWith('data: '))) {
       const raw = line.slice(6).trim();
       if (raw === '[DONE]') continue;
       try {
-        const parsed = JSON.parse(raw);
-        const token = parsed.choices?.[0]?.delta?.content;
+        const token = JSON.parse(raw).choices?.[0]?.delta?.content;
         if (token) send('text', token);
-      } catch {
-        // skip malformed chunks
-      }
+      } catch { /* skip malformed chunks */ }
     }
   }
 
   send('done', '');
   controller.close();
 }
-
-// ── Route handler ─────────────────────────────────────────────────────────────
 
 export async function POST(req: NextRequest) {
   try {
@@ -249,15 +278,20 @@ export async function POST(req: NextRequest) {
         const send = (event: string, data: string) => sseEvent(controller, event, data);
 
         try {
+          // Determinar rol del usuario para tools y system prompt
+          const rol = userToken ? await getRolFromToken(userToken) : 'Jugador';
+          const tools = getToolsForRol(rol);
+          const systemPrompt = buildSystemPrompt(rol);
+
           if (GEMINI_API_KEY) {
             const messages: Message[] = [
-              { role: 'system', content: buildSystemPrompt() },
+              { role: 'system', content: systemPrompt },
               ...userMessages.map((m: { role: string; content: string }) => ({
                 role: m.role as 'user' | 'assistant',
                 content: m.content,
               })),
             ];
-            await runGeminiAgent(messages, send, controller, userToken);
+            await runGeminiAgent(messages, tools, send, controller, userToken);
           } else {
             await runOllamaAgent(userMessages, send, controller);
           }
