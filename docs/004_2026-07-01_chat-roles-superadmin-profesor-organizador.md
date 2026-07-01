@@ -64,15 +64,15 @@
 | `/admin/torneos-dashboard` | Estadísticas de todos los torneos, filtrar por mes/deporte/búsqueda |
 | `/admin/clubes/nuevo` | Crear club con nombre, slug y credenciales MercadoPago |
 | `/admin/clubes/editar/[id]` | Editar nombre, slug y credenciales MP de un club |
-| `/admin/staff/nuevo` | Crear usuario staff: nombre, email, password, roles, clubs asignados |
+| `/admin/staff/nuevo` | Crear usuario staff: nombre, email, password, roles, clubes asignados |
 | `/admin/logs` | Stream de logs del servidor en tiempo real |
 
 **Tools existentes para SuperAdmin:** (hereda las del Organizador, ya que comparte menú)
 
 **Tools faltantes para SuperAdmin:**
-- `ver_estadisticas_sistema` — métricas globales (total usuarios, clubs, ingresos del mes, partidos pendientes)
+- `ver_estadisticas_sistema` — métricas globales (total usuarios, clubes, ingresos del mes, partidos pendientes)
 - `ver_deudas_profesores` — resumen de deudas de staff agrupado por profesor y club
-- `listar_clubs` — listar organizaciones registradas con estado
+- `listar_clubes` — listar organizaciones registradas con estado
 - `listar_staff_club` — listar miembros de staff de un club con sus roles
 - `cambiar_fase_torneo` — avanzar fase de cualquier torneo (compartida con Organizador)
 - `listar_partidos_torneo` — ver partidos (compartida con Organizador)
@@ -114,9 +114,9 @@
 - [ ] **B.2.7** `POST /api/canchas/editar` — actualiza precios, superficie y horarios de una cancha. Verifica que la cancha pertenezca al club del organizador.
 
 ### B.3 SuperAdmin
-- [ ] **B.3.1** `GET /api/admin/estadisticas` — métricas globales: total clubs, usuarios, torneos activos, alquileres del mes, ingresos totales del mes.
+- [ ] **B.3.1** `GET /api/admin/estadisticas` — métricas globales: total clubes, usuarios, torneos activos, alquileres del mes, ingresos totales del mes.
 - [ ] **B.3.2** `GET /api/admin/deudas` — lista de profesores con deuda pendiente, agrupada por club.
-- [ ] **B.3.3** `GET /api/admin/clubs` — lista de organizaciones con nombre, slug y estado.
+- [ ] **B.3.3** `GET /api/admin/clubes` — lista de organizaciones con nombre, slug y estado.
 - [ ] **B.3.4** `GET /api/admin/staff` — lista de miembros de staff filtrable por club, con roles.
 
 ---
@@ -196,7 +196,7 @@
 
 - [ ] **E.1** `ver_estadisticas_sistema` — métricas globales del sistema. Sin parámetros. Llama a `GET /api/admin/estadisticas`.
 - [ ] **E.2** `ver_deudas_profesores` — listado de profesores con deudas pendientes. Sin parámetros. Llama a `GET /api/admin/deudas`.
-- [ ] **E.3** `listar_clubs` — ver todas las organizaciones registradas. Sin parámetros. Llama a `GET /api/admin/clubs`.
+- [ ] **E.3** `listar_clubes` — ver todas las organizaciones registradas. Sin parámetros. Llama a `GET /api/admin/clubes`.
 - [ ] **E.4** `listar_staff_club` — ver staff de un club específico.
   ```json
   { "organizacion_id": "uuid" }
@@ -246,7 +246,7 @@
 | `web/src/app/api/canchas/editar/route.ts` | Crear | B.2.7 |
 | `web/src/app/api/admin/estadisticas/route.ts` | Crear | B.3.1 |
 | `web/src/app/api/admin/deudas/route.ts` | Crear | B.3.2 |
-| `web/src/app/api/admin/clubs/route.ts` | Crear | B.3.3 |
+| `web/src/app/api/admin/clubes/route.ts` | Crear | B.3.3 |
 | `web/src/app/api/admin/staff/route.ts` | Crear | B.3.4 |
 | `web/src/lib/supabase-tools.ts` | Modificar | F.1–F.4 |
 | `web/src/app/api/ai/chat/route.ts` | Modificar | F.5–F.6 |
@@ -273,7 +273,7 @@
 ### SuperAdmin
 1. "Resumen de estadísticas del sistema"
 2. "¿Qué profesores tienen deuda pendiente?"
-3. "Mostrarme todos los clubs registrados"
+3. "Mostrarme todos los clubes registrados"
 4. "Ver staff del club principal"
 5. "Listar torneos activos con inscriptos"
 

@@ -165,9 +165,9 @@ export default function Sidebar() {
       setProfile(prev => prev ? { ...prev, rol: newRole } : null);
       setTimeout(() => {
         setSwitchingRole(false);
-        if (newRole === 'SuperAdmin') router.push('/admin/dashboard');
-        else if (newRole === 'Organizador') router.push('/organizador/torneos/nuevo');
-        else if (newRole === 'Profesor') router.push('/profesor/agenda');
+        if (newRole === 'SuperAdmin') router.push('/admin/chat');
+        else if (newRole === 'Organizador') router.push('/organizador/chat');
+        else if (newRole === 'Profesor') router.push('/profesor/chat');
         else router.push('/jugador/chat');
       }, 600);
     } catch (err) { console.error(err); setSwitchingRole(false); }
@@ -199,6 +199,7 @@ export default function Sidebar() {
     }
 
     if (profile.rol === 'SuperAdmin') {
+      items.push({ label: 'Chat', href: '/admin/chat', icon: <MessageCircle size={20} /> });
       items.push({ label: 'Inicio', href: '/admin/dashboard', icon: <Home size={20} /> });
       items.push({
         label: 'Torneos',
@@ -212,6 +213,7 @@ export default function Sidebar() {
       items.push({ label: 'Canchas', href: '/organizador/canchas', icon: <LayoutGrid size={20} /> });
       items.push({ label: 'Deudas Staff', href: '/admin/deudas', icon: <Landmark size={20} /> });
     } else if (profile.rol === 'Organizador') {
+      items.push({ label: 'Chat', href: '/organizador/chat', icon: <MessageCircle size={20} /> });
       items.push({ label: 'Inicio', href: '/admin/dashboard', icon: <Home size={20} /> });
       items.push({
         label: 'Torneos',
@@ -225,6 +227,7 @@ export default function Sidebar() {
       items.push({ label: 'Canchas', href: '/organizador/canchas', icon: <LayoutGrid size={20} /> });
       items.push({ label: 'Deudas Staff', href: '/admin/deudas', icon: <Landmark size={20} /> });
     } else if (profile.rol === 'Profesor') {
+      items.push({ label: 'Chat', href: '/profesor/chat', icon: <MessageCircle size={20} /> });
       items.push({ label: 'Inicio', href: '/profesor/dashboard', icon: <Home size={20} /> });
       items.push({ label: 'Mi Agenda', href: '/profesor/agenda', icon: <Calendar size={20} /> });
       items.push({ label: 'Reservar Cancha', href: '/profesor/reservar', icon: <Calendar size={20} /> });

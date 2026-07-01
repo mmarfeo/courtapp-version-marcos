@@ -1,6 +1,6 @@
 import { NextRequest } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
-import { TOOLS_JUGADOR, TOOLS_PROFESOR, TOOLS_ORGANIZADOR, executeToolCall, ToolCall } from '@/lib/supabase-tools';
+import { TOOLS_JUGADOR, TOOLS_PROFESOR, TOOLS_ORGANIZADOR, TOOLS_SUPERADMIN, executeToolCall, ToolCall } from '@/lib/supabase-tools';
 
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-flash-lite-latest';
@@ -11,7 +11,8 @@ const MAX_TOOL_ITERATIONS = 5;
 type Rol = 'Jugador' | 'Profesor' | 'Organizador' | 'SuperAdmin';
 
 function getToolsForRol(rol: Rol) {
-  if (rol === 'Organizador' || rol === 'SuperAdmin') return TOOLS_ORGANIZADOR;
+  if (rol === 'SuperAdmin') return TOOLS_SUPERADMIN;
+  if (rol === 'Organizador') return TOOLS_ORGANIZADOR;
   if (rol === 'Profesor') return TOOLS_PROFESOR;
   return TOOLS_JUGADOR;
 }
@@ -66,12 +67,17 @@ HERRAMIENTAS Y CUÁNDO USARLAS:
 
 ROL ACTUAL: Profesor
 HERRAMIENTAS Y CUÁNDO USARLAS:
-- buscar_canchas_disponibles → antes de crear una clase, verificar disponibilidad
+- buscar_canchas_disponibles → antes de crear una clase o reservar cancha
 - crear_clase → para crear una nueva clase (pedir confirmación primero)
+- editar_clase → para modificar precio, cupo, horario o categoría de una clase propia
 - listar_mis_clases_como_profesor → para ver las clases propias del profesor
 - ver_alumnos_clase → para ver quiénes están inscriptos en una clase
-- cancelar_clase → para cancelar una clase (notifica automáticamente a alumnos, pedir confirmación)
+- cancelar_clase → para cancelar una clase (pedir confirmación, notifica a alumnos)
+- crear_reserva_cancha → para reservar una cancha propia (pedir confirmación)
+- cancelar_reserva_cancha → para cancelar una reserva de cancha propia (pedir confirmación)
 - ver_mis_alquileres_como_profesor → para ver las canchas reservadas por el profesor
+- ver_mis_ingresos → para ver el resumen de ingresos del mes (clases + alquileres cobrados)
+- ver_mi_deuda → para ver los alquileres aprobados pendientes de pago con el club
 - consultar_canchas → para ver canchas y precios
 - consultar_profesores → para ver otros profesores`,
 
@@ -79,20 +85,34 @@ HERRAMIENTAS Y CUÁNDO USARLAS:
 
 ROL ACTUAL: Organizador
 HERRAMIENTAS Y CUÁNDO USARLAS:
-- listar_todos_los_torneos → para ver todos los torneos con inscriptos
+- listar_todos_los_torneos → para ver todos los torneos con cantidad de inscriptos
 - listar_inscripciones_torneo → para ver quién se inscribió en un torneo específico
+- crear_torneo → para crear un nuevo torneo (pedir confirmación primero)
+- cambiar_fase_torneo → para avanzar el torneo de fase (Inscripcion→Zonas→Cuartos→Semifinal→Final→Terminado)
+- listar_partidos_torneo → para ver los partidos de un torneo con jugadores y estado
+- asignar_partido → para asignar fecha, hora y cancha a un partido
+- registrar_resultado → para cargar el resultado de un partido jugado
 - consultar_disponibilidad_cancha → para ver el calendario de ocupación de una cancha
 - listar_todos_alquileres → para ver todos los alquileres del club
 - listar_profesores_y_deudas → para ver el estado de deudas de los profesores
 - ver_pagos_pendientes → para ver pagos sin confirmar (alquileres, clases, torneos)
+- crear_cancha → para dar de alta una nueva cancha (pedir confirmación)
+- editar_cancha → para modificar precios, superficie o estado de una cancha
+- cancelar_reserva_organizador → para cancelar cualquier reserva del club (pedir confirmación)
+- cancelar_clase_organizador → para cancelar cualquier clase del club (pedir confirmación)
 - consultar_clases → para ver todas las clases del club
 - consultar_canchas → para ver canchas y precios
 - consultar_profesores → para ver profesores`,
 
     SuperAdmin: `${base}
 
-ROL ACTUAL: SuperAdmin (acceso total)
-Tenés las mismas herramientas que un Organizador más acceso completo a la plataforma.`,
+ROL ACTUAL: SuperAdmin (acceso total a la plataforma)
+HERRAMIENTAS Y CUÁNDO USARLAS:
+- ver_estadisticas_sistema → para ver métricas globales: clubs, usuarios, torneos, partidos e ingresos del mes
+- ver_deudas_profesores → para ver todos los profesores con deuda pendiente por alquileres
+- listar_clubs → para listar todos los clubs/organizaciones registrados
+- listar_staff_club → para ver el staff de un club específico (requiere organizacion_id) o todos
+- [+ todas las herramientas de Organizador disponibles]`,
   };
 
   return prompts[rol] ?? prompts['Jugador'];
