@@ -127,41 +127,42 @@ export default function JugadorDashboardScreen() {
   }
 
   return (
-    <ScrollView 
-      style={[styles.container, { backgroundColor: theme.background }]}
-      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={Brand.green} />}
-    >
-      <StatusBar barStyle="light-content" backgroundColor="#0a0a0a" />
+    <View style={{ flex: 1, backgroundColor: theme.background }}>
+      <ScrollView 
+        style={[styles.container, { backgroundColor: theme.background }]}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={Brand.green} />}
+      >
+        <StatusBar barStyle="light-content" backgroundColor="#0a0a0a" />
 
-      {/* Header */}
-      <View style={[styles.header, { backgroundColor: '#0a0a0a' }]}>
-        <View>
-          <Text style={styles.headerGreeting}>
-            Hola, {user?.nombre || 'Jugador'} 👋
-          </Text>
-          <Text style={styles.headerTitle}>Mi Dashboard</Text>
+        {/* Header */}
+        <View style={[styles.header, { backgroundColor: '#0a0a0a' }]}>
+          <View>
+            <Text style={styles.headerGreeting}>
+              Hola, {user?.nombre || 'Jugador'} 👋
+            </Text>
+            <Text style={styles.headerTitle}>Mi Dashboard</Text>
+          </View>
         </View>
-      </View>
 
-      <View style={styles.content}>
-        
-        {/* Quick Actions */}
-        <View style={styles.actionsRow}>
-          <TouchableOpacity 
-            style={[styles.actionBtn, { backgroundColor: theme.card, borderColor: theme.border }]}
-            onPress={() => router.push('/(jugador)/torneos')}
-          >
-            <Ionicons name="trophy-outline" size={18} color={theme.text} />
-            <Text style={[styles.actionBtnText, { color: theme.text }]}>Buscar Torneos</Text>
-          </TouchableOpacity>
-          <TouchableOpacity 
-            style={[styles.actionBtnPrimary, { backgroundColor: Brand.orange }]}
-            onPress={() => router.push('/(jugador)/clases')}
-          >
-            <Ionicons name="calendar-outline" size={18} color="#fff" />
-            <Text style={[styles.actionBtnText, { color: '#fff' }]}>Buscar Clases</Text>
-          </TouchableOpacity>
-        </View>
+        <View style={styles.content}>
+          
+          {/* Quick Actions */}
+          <View style={styles.actionsRow}>
+            <TouchableOpacity 
+              style={[styles.actionBtn, { backgroundColor: theme.card, borderColor: theme.border }]}
+              onPress={() => router.push('/(jugador)/torneos')}
+            >
+              <Ionicons name="trophy-outline" size={18} color={theme.text} />
+              <Text style={[styles.actionBtnText, { color: theme.text }]}>Buscar Torneos</Text>
+            </TouchableOpacity>
+            <TouchableOpacity 
+              style={[styles.actionBtnPrimary, { backgroundColor: Brand.orange }]}
+              onPress={() => router.push('/(jugador)/clases')}
+            >
+              <Ionicons name="calendar-outline" size={18} color="#fff" />
+              <Text style={[styles.actionBtnText, { color: '#fff' }]}>Buscar Clases</Text>
+            </TouchableOpacity>
+          </View>
 
         {/* Resumen del Mes */}
         <Text style={[styles.sectionTitle, { color: theme.text }]}>Gastos del Mes</Text>
@@ -285,7 +286,33 @@ export default function JugadorDashboardScreen() {
           onClose={() => setBracketVisible(false)}
         />
       )}
-    </ScrollView>
+      </ScrollView>
+
+      {/* Floating Chat Bubble */}
+      <TouchableOpacity
+        style={{
+          position: 'absolute',
+          bottom: 20,
+          right: 20,
+          width: 56,
+          height: 56,
+          borderRadius: 28,
+          backgroundColor: Brand.orange,
+          justifyContent: 'center',
+          alignItems: 'center',
+          elevation: 5,
+          shadowColor: '#000',
+          shadowOffset: { width: 0, height: 2 },
+          shadowOpacity: 0.25,
+          shadowRadius: 3.84,
+          zIndex: 9999,
+        }}
+        onPress={() => router.push('/(jugador)/chat')}
+        activeOpacity={0.8}
+      >
+        <Ionicons name="chatbubbles" size={24} color="#fff" />
+      </TouchableOpacity>
+    </View>
   );
 }
 

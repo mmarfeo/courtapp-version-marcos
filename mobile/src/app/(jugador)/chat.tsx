@@ -11,9 +11,12 @@ import {
   StatusBar,
   ActivityIndicator,
   Alert,
+  ScrollView,
+  useColorScheme,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { router } from 'expo-router';
 import { supabase } from '@/lib/supabase';
 import { useTheme } from '@/hooks/use-theme';
 import { useChatHistory, type ChatMessage } from '@/hooks/use-chat-history';
@@ -89,6 +92,7 @@ function buildListItems(messages: ChatMessage[]): ListItem[] {
 
 export default function ChatScreen() {
   const theme = useTheme();
+  const scheme = useColorScheme();
   const { messages, setMessages, hasMore, syncing, loadHistory, saveMessage, updateLastAssistantMessage, loadMore, clearHistory } = useChatHistory();
   const [input, setInput] = useState('');
   const [sending, setSending] = useState(false);
@@ -122,93 +126,49 @@ export default function ChatScreen() {
 
     // Guardar mensaje del usuario
     await saveMessage('user', trimmed);
-
-    // Placeholder del asistente
-    const placeholderId = `streaming_${Date.now()}`;
-    streamingIdRef.current = placeholderId;
-    setMessages((prev) => [
-      ...prev,
-      { id: placeholderId, role: 'assistant', content: '', timestamp: new Date() },
-    ]);
     scrollToBottom();
 
     try {
+      console.log(`[CHAT LOG] 1. Iniciando envío. API_BASE: ${API_BASE}`);
       const { data } = await supabase.auth.getSession();
       const token = data.session?.access_token ?? null;
+      console.log(`[CHAT LOG] 2. Supabase token obtenido: ${token ? 'Sí' : 'No'}`);
 
-      // Construir historial (sin el placeholder)
+      // Construir historial
       const historyForApi = messages
-        .filter((m) => m.id !== placeholderId)
         .concat({ id: 'tmp', role: 'user', content: trimmed, timestamp: new Date() })
         .map((m) => ({ role: m.role, content: m.content }));
 
+      console.log(`[CHAT LOG] 3. Enviando petición POST a ${API_BASE}/api/ai/chat con historial de ${historyForApi.length} mensajes...`);
       const res = await fetch(`${API_BASE}/api/ai/chat`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ messages: historyForApi, userToken: token }),
+        body: JSON.stringify({ messages: historyForApi, userToken: token, stream: false }),
       });
 
-      if (!res.ok) throw new Error(`Error ${res.status}`);
-
-      const reader = res.body?.getReader();
-      if (!reader) throw new Error('Sin stream');
-
-      const decoder = new TextDecoder();
-      let buffer = '';
-      let accumulatedText = '';
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split('\n');
-        buffer = lines.pop() ?? '';
-
-        let currentEvent = '';
-        for (const line of lines) {
-          if (line.startsWith('event: ')) {
-            currentEvent = line.slice(7).trim();
-          } else if (line.startsWith('data: ')) {
-            let payload = '';
-            try { payload = JSON.parse(line.slice(6)); } catch { payload = line.slice(6); }
-
-            if (currentEvent === 'text') {
-              accumulatedText += payload;
-              setMessages((prev) =>
-                prev.map((m) => m.id === placeholderId ? { ...m, content: accumulatedText } : m)
-              );
-              scrollToBottom();
-            } else if (currentEvent === 'tool_start') {
-              setToolStatus(TOOL_LABELS[payload] ?? `Consultando...`);
-            } else if (currentEvent === 'tool_end') {
-              setToolStatus(null);
-            } else if (currentEvent === 'done') {
-              setToolStatus(null);
-            } else if (currentEvent === 'error') {
-              throw new Error(payload);
-            }
-            currentEvent = '';
-          }
-        }
+      console.log(`[CHAT LOG] 4. Respuesta recibida. Status: ${res.status}`);
+      if (!res.ok) {
+        const errorText = await res.text();
+        console.error(`[CHAT LOG ERROR] Status no-ok. Detalle: ${errorText}`);
+        throw new Error(`Error ${res.status}: ${errorText}`);
       }
 
-      // Guardar respuesta del asistente en DB y reemplazar el id temporal
+      const responseData = await res.json();
+      console.log(`[CHAT LOG] 5. JSON decodificado. Obtenido:`, responseData);
+      const accumulatedText = responseData.text || '';
+
+      // Guardar respuesta del asistente en DB
       if (accumulatedText) {
-        const saved = await saveMessage('assistant', accumulatedText);
-        setMessages((prev) =>
-          prev.map((m) => m.id === placeholderId ? { ...saved } : m)
-        );
+        await saveMessage('assistant', accumulatedText);
       }
     } catch (err: any) {
+      console.error(`[CHAT LOG ERROR] Capturado en try-catch:`, err);
       const errMsg = `Lo siento, ocurrió un error: ${err.message ?? 'desconocido'}`;
-      setMessages((prev) =>
-        prev.map((m) => m.id === placeholderId ? { ...m, content: errMsg } : m)
-      );
+      await saveMessage('assistant', errMsg);
     } finally {
       setSending(false);
       setToolStatus(null);
-      streamingIdRef.current = null;
+      scrollToBottom();
     }
   }, [sending, messages, saveMessage, setMessages, scrollToBottom]);
 
@@ -228,6 +188,18 @@ export default function ChatScreen() {
     : messages;
 
   const listItems = buildListItems(displayMessages);
+  if (sending) {
+    listItems.push({
+      type: 'message',
+      key: 'typing_placeholder',
+      msg: {
+        id: 'typing_placeholder',
+        role: 'assistant',
+        content: '',
+        timestamp: new Date(),
+      },
+    });
+  }
 
   const renderItem = ({ item }: { item: ListItem }) => {
     if (item.type === 'separator') {
@@ -279,25 +251,30 @@ export default function ChatScreen() {
     );
   };
 
+  const isDark = scheme === 'dark';
+
   return (
     <View style={[styles.container, { backgroundColor: theme.background }]}>
-      <StatusBar barStyle="light-content" backgroundColor="#0a0a0a" />
+      <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} backgroundColor={theme.background} />
 
       {/* Header estilo WhatsApp */}
-      <View style={[styles.header, { backgroundColor: '#0a0a0a' }]}>
+      <View style={[styles.header, { backgroundColor: theme.background, borderBottomWidth: 1, borderBottomColor: theme.border }]}>
         <View style={styles.headerLeft}>
+          <TouchableOpacity onPress={() => router.back()} style={{ marginRight: 12, paddingVertical: 4 }}>
+            <Ionicons name="arrow-back" size={24} color={theme.text} />
+          </TouchableOpacity>
           <View style={[styles.headerAvatar, { backgroundColor: Brand.green }]}>
             <Ionicons name="sparkles" size={18} color="#fff" />
           </View>
           <View>
-            <Text style={styles.headerTitle}>Asistente CourtUp</Text>
-            <Text style={styles.headerSubtitle}>
+            <Text style={[styles.headerTitle, { color: theme.text }]}>Asistente CourtUp</Text>
+            <Text style={[styles.headerSubtitle, { color: theme.textSecondary }]}>
               {syncing ? 'Sincronizando...' : toolStatus ?? 'En línea · 24/7'}
             </Text>
           </View>
         </View>
         <TouchableOpacity onPress={handleClearChat} style={styles.headerBtn}>
-          <Ionicons name="trash-outline" size={20} color="#9ca3af" />
+          <Ionicons name="trash-outline" size={20} color={theme.textSecondary} />
         </TouchableOpacity>
       </View>
 

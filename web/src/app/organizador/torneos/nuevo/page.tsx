@@ -154,9 +154,15 @@ export default function NuevoTorneoPage() {
                 body: `Se han creado torneos para "${nombre.trim()}" en varias categorías. ¡Inscríbete ya!`,
               }));
               
+              const { data: { session } } = await supabase.auth.getSession();
+              const token = session?.access_token;
+
               await fetch('/api/notifications/send', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: { 
+                  'Content-Type': 'application/json',
+                  'Authorization': `Bearer ${token}`
+                },
                 body: JSON.stringify({ messages })
               });
             }

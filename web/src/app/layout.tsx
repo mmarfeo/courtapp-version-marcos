@@ -3,7 +3,6 @@ import localFont from "next/font/local";
 import "./globals.css";
 import Sidebar from "@/components/Sidebar";
 import ForcePasswordGuard from "@/components/ForcePasswordGuard";
-import AIAssistant from "@/components/AIAssistant";
 
 const geistSans = localFont({
   src: "./fonts/GeistVF.woff",
@@ -36,7 +35,6 @@ export default function RootLayout({
           <div className="main-content-layout min-h-screen">
             {children}
           </div>
-          <AIAssistant />
         </ForcePasswordGuard>
       </body>
     </html>

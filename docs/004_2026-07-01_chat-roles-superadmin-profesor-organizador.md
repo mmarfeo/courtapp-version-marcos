@@ -83,15 +83,15 @@
 
 ## Fase A — Páginas de chat por rol en la web
 
-- [ ] **A.1** Crear `/profesor/chat/page.tsx` — copiar estructura de `/jugador/chat/page.tsx`, adaptar quick actions para Profesor
-- [ ] **A.2** Crear `/organizador/chat/page.tsx` — copiar estructura, adaptar quick actions para Organizador
-- [ ] **A.3** Crear `/admin/chat/page.tsx` — copiar estructura, adaptar quick actions para SuperAdmin
-- [ ] **A.4** Agregar "Chat" como primer ítem en el Sidebar para rol `Profesor`
-- [ ] **A.5** Agregar "Chat" como primer ítem en el Sidebar para rol `Organizador`
-- [ ] **A.6** Agregar "Chat" como primer ítem en el Sidebar para rol `SuperAdmin`
-- [ ] **A.7** Crear `/profesor/page.tsx` → redirect a `/profesor/chat`
-- [ ] **A.8** Crear `/organizador/page.tsx` → redirect a `/organizador/chat` (si no existe)
-- [ ] **A.9** Actualizar `handleRoleSwitch` en Sidebar: Profesor → `/profesor/chat`, Organizador → `/organizador/chat`
+- [x] **A.1** Crear `/profesor/chat/page.tsx` — copiar estructura de `/jugador/chat/page.tsx`, adaptar quick actions para Profesor
+- [x] **A.2** Crear `/organizador/chat/page.tsx` — copiar estructura, adaptar quick actions para Organizador
+- [x] **A.3** Crear `/admin/chat/page.tsx` — copiar estructura, adaptar quick actions para SuperAdmin
+- [x] **A.4** Agregar "Chat" como primer ítem en el Sidebar para rol `Profesor`
+- [x] **A.5** Agregar "Chat" como primer ítem en el Sidebar para rol `Organizador`
+- [x] **A.6** Agregar "Chat" como primer ítem en el Sidebar para rol `SuperAdmin`
+- [x] **A.7** Crear `/profesor/page.tsx` → redirect a `/profesor/chat`
+- [x] **A.8** Crear `/organizador/page.tsx` → redirect a `/organizador/chat` (si no existe)
+- [x] **A.9** Actualizar `handleRoleSwitch` en Sidebar: Profesor → `/profesor/chat`, Organizador → `/organizador/chat`
 
 ---
 
@@ -100,24 +100,24 @@
 > Endpoints necesarios para soportar las tools de escritura nuevas.
 
 ### B.1 Profesor
-- [ ] **B.1.1** `POST /api/clases/editar` — editar clase existente (deporte, precio, cupo, hora). Verifica que el JWT sea el profesor dueño de la clase.
-- [ ] **B.1.2** `GET /api/profesor/ingresos` — retorna suma de `reservas_clases.monto_total_pagado` + `alquileres_cancha.monto_total` del mes actual para el profesor autenticado.
-- [ ] **B.1.3** `GET /api/profesor/deuda` — retorna `alquileres_cancha` donde `estado_pago = 'Pendiente'` del profesor autenticado.
+- [x] **B.1.1** `POST /api/clases/editar` — editar clase existente (deporte, precio, cupo, hora). Verifica que el JWT sea el profesor dueño de la clase.
+- [x] **B.1.2** `GET /api/profesor/ingresos` — retorna suma de `reservas_clases.monto_total_pagado` + `alquileres_cancha.monto_total` del mes actual para el profesor autenticado.
+- [x] **B.1.3** `GET /api/profesor/deuda` — retorna `alquileres_cancha` donde `estado_pago = 'Pendiente'` del profesor autenticado.
 
 ### B.2 Organizador
-- [ ] **B.2.1** `POST /api/torneos/crear` — crea registro en `torneos` + registros en `tarifas_torneo` (precio_single, precio_dobles, precio_ambos). Verifica rol Organizador/SuperAdmin.
-- [ ] **B.2.2** `POST /api/torneos/cambiar-fase` — recibe `{ torneo_id, nueva_fase }` y hace UPDATE en `torneos.fase_actual`. Valida que la fase sea válida (Inscripcion → Zonas → Cuartos → Semifinal → Final → Terminado).
-- [ ] **B.2.3** `GET /api/torneos/[id]/partidos` — lista partidos de un torneo con estado, resultado, jugadores y cancha asignada.
-- [ ] **B.2.4** `POST /api/partidos/asignar` — recibe `{ partido_id, fecha, hora, cancha_id }` y actualiza el partido.
-- [ ] **B.2.5** `POST /api/partidos/resultado` — recibe `{ partido_id, set1, set2, set3, ganador_pareja }` y registra resultado. Cambia estado a `jugado`.
-- [ ] **B.2.6** `POST /api/canchas/crear` — crea una cancha en el club del organizador autenticado.
-- [ ] **B.2.7** `POST /api/canchas/editar` — actualiza precios, superficie y horarios de una cancha. Verifica que la cancha pertenezca al club del organizador.
+- [x] **B.2.1** `POST /api/torneos/crear` — crea registro en `torneos` + registros en `tarifas_torneo` (precio_single, precio_dobles, precio_ambos). Verifica rol Organizador/SuperAdmin.
+- [x] **B.2.2** `POST /api/torneos/cambiar-fase` — recibe `{ torneo_id, nueva_fase }` y hace UPDATE en `torneos.fase_actual`. Valida que la fase sea válida (Inscripcion → Zonas → Cuartos → Semifinal → Final → Terminado).
+- [x] **B.2.3** `GET /api/torneos/[id]/partidos` — lista partidos de un torneo con estado, resultado, jugadores y cancha asignada.
+- [x] **B.2.4** `POST /api/partidos/asignar` — recibe `{ partido_id, fecha, hora, cancha_id }` y actualiza el partido.
+- [x] **B.2.5** `POST /api/partidos/resultado` — recibe `{ partido_id, set1, set2, set3, ganador_pareja }` y registra resultado. Cambia estado a `jugado`.
+- [x] **B.2.6** `POST /api/canchas/crear` — crea una cancha en el club del organizador autenticado.
+- [x] **B.2.7** `POST /api/canchas/editar` — actualiza precios, superficie y horarios de una cancha. Verifica que la cancha pertenezca al club del organizador.
 
 ### B.3 SuperAdmin
-- [ ] **B.3.1** `GET /api/admin/estadisticas` — métricas globales: total clubes, usuarios, torneos activos, alquileres del mes, ingresos totales del mes.
-- [ ] **B.3.2** `GET /api/admin/deudas` — lista de profesores con deuda pendiente, agrupada por club.
-- [ ] **B.3.3** `GET /api/admin/clubes` — lista de organizaciones con nombre, slug y estado.
-- [ ] **B.3.4** `GET /api/admin/staff` — lista de miembros de staff filtrable por club, con roles.
+- [x] **B.3.1** `GET /api/admin/estadisticas` — métricas globales: total clubes, usuarios, torneos activos, alquileres del mes, ingresos totales del mes.
+- [x] **B.3.2** `GET /api/admin/deudas` — lista de profesores con deuda pendiente, agrupada por club.
+- [x] **B.3.3** `GET /api/admin/clubes` — lista de organizaciones con nombre, slug y estado.
+- [x] **B.3.4** `GET /api/admin/staff` — lista de miembros de staff filtrable por club, con roles.
 
 ---
 
@@ -125,15 +125,15 @@
 
 > Agregar en `web/src/lib/supabase-tools.ts` dentro de `TOOLS_PROFESOR`.
 
-- [ ] **C.1** `crear_reserva_cancha` — igual que en TOOLS_JUGADOR: buscar cancha disponible y crear alquiler. (El Profesor ya puede reservar canchas en la UI.)
-- [ ] **C.2** `cancelar_reserva_cancha` — cancelar alquiler propio. (Compartir lógica con TOOLS_JUGADOR.)
-- [ ] **C.3** `editar_clase` — modificar clase existente del profesor.
+- [x] **C.1** `crear_reserva_cancha` — igual que en TOOLS_JUGADOR: buscar cancha disponible y crear alquiler. (El Profesor ya puede reservar canchas en la UI.)
+- [x] **C.2** `cancelar_reserva_cancha` — cancelar alquiler propio. (Compartir lógica con TOOLS_JUGADOR.)
+- [x] **C.3** `editar_clase` — modificar clase existente del profesor.
   ```json
   { "clase_id": "uuid", "precio": 1500, "cupo": 6, "hora_inicio": "09:00" }
   ```
   Llama a `POST /api/clases/editar`.
-- [ ] **C.4** `ver_mis_ingresos` — obtener resumen de ingresos del mes. Llama a `GET /api/profesor/ingresos`. Sin parámetros.
-- [ ] **C.5** `ver_mi_deuda` — obtener alquileres pendientes de pago. Llama a `GET /api/profesor/deuda`. Sin parámetros.
+- [x] **C.4** `ver_mis_ingresos` — obtener resumen de ingresos del mes. Llama a `GET /api/profesor/ingresos`. Sin parámetros.
+- [x] **C.5** `ver_mi_deuda` — obtener alquileres pendientes de pago. Llama a `GET /api/profesor/deuda`. Sin parámetros.
 
 ---
 
@@ -141,47 +141,47 @@
 
 > Agregar en `web/src/lib/supabase-tools.ts` dentro de `TOOLS_ORGANIZADOR`.
 
-- [ ] **D.1** `crear_torneo` — crear torneo completo.
+- [x] **D.1** `crear_torneo` — crear torneo completo.
   ```json
   { "nombre_torneo": "string", "deporte": "Tenis|Padel", "categorias": ["A","B"], "precio_single": 5000, "precio_dobles": 8000, "fecha_inicio": "2026-08-01", "formato_sets": 3 }
   ```
   Llama a `POST /api/torneos/crear`.
-- [ ] **D.2** `cambiar_fase_torneo` — avanzar o cambiar la fase de inscripción.
+- [x] **D.2** `cambiar_fase_torneo` — avanzar o cambiar la fase de inscripción.
   ```json
   { "torneo_id": "uuid", "nueva_fase": "Inscripcion|Zonas|Cuartos|Semifinal|Final|Terminado" }
   ```
   Llama a `POST /api/torneos/cambiar-fase`.
-- [ ] **D.3** `listar_partidos_torneo` — listar partidos de un torneo.
+- [x] **D.3** `listar_partidos_torneo` — listar partidos de un torneo.
   ```json
   { "torneo_id": "uuid", "estado": "pendiente|jugado|todos" }
   ```
   Llama a `GET /api/torneos/[id]/partidos`.
-- [ ] **D.4** `asignar_partido` — asignar fecha, hora y cancha a un partido.
+- [x] **D.4** `asignar_partido` — asignar fecha, hora y cancha a un partido.
   ```json
   { "partido_id": "uuid", "fecha": "2026-08-10", "hora": "18:00", "cancha_id": "uuid" }
   ```
   Llama a `POST /api/partidos/asignar`.
-- [ ] **D.5** `registrar_resultado` — cargar resultado de un partido jugado.
+- [x] **D.5** `registrar_resultado` — cargar resultado de un partido jugado.
   ```json
   { "partido_id": "uuid", "resultado_set1": "6-4", "resultado_set2": "7-5", "resultado_set3": null, "ganador_pareja": 1 }
   ```
   Llama a `POST /api/partidos/resultado`.
-- [ ] **D.6** `crear_cancha` — crear nueva cancha en el club.
+- [x] **D.6** `crear_cancha` — crear nueva cancha en el club.
   ```json
   { "numero_cancha": 5, "deporte": "Padel", "superficie": "Cristal", "precio_hora_dia": 3000, "precio_hora_noche": 4000 }
   ```
   Llama a `POST /api/canchas/crear`.
-- [ ] **D.7** `editar_cancha` — modificar configuración de una cancha.
+- [x] **D.7** `editar_cancha` — modificar configuración de una cancha.
   ```json
   { "cancha_id": "uuid", "precio_hora_dia": 3500, "precio_hora_noche": 4500, "precio_profesor_hora_dia": 1500 }
   ```
   Llama a `POST /api/canchas/editar`.
-- [ ] **D.8** `cancelar_reserva_organizador` — cancelar cualquier alquiler del club.
+- [x] **D.8** `cancelar_reserva_organizador` — cancelar cualquier alquiler del club.
   ```json
   { "alquiler_id": "uuid", "motivo": "string" }
   ```
   Llama a `POST /api/canchas/cancelar` (mismo endpoint, el org puede cancelar cualquiera).
-- [ ] **D.9** `cancelar_clase_organizador` — cancelar cualquier clase del club y notificar alumnos.
+- [x] **D.9** `cancelar_clase_organizador` — cancelar cualquier clase del club y notificar alumnos.
   ```json
   { "clase_id": "uuid", "motivo": "string" }
   ```
@@ -194,10 +194,10 @@
 > Crear `TOOLS_SUPERADMIN` en `web/src/lib/supabase-tools.ts`.
 > SuperAdmin hereda todas las tools del Organizador + las siguientes exclusivas.
 
-- [ ] **E.1** `ver_estadisticas_sistema` — métricas globales del sistema. Sin parámetros. Llama a `GET /api/admin/estadisticas`.
-- [ ] **E.2** `ver_deudas_profesores` — listado de profesores con deudas pendientes. Sin parámetros. Llama a `GET /api/admin/deudas`.
-- [ ] **E.3** `listar_clubes` — ver todas las organizaciones registradas. Sin parámetros. Llama a `GET /api/admin/clubes`.
-- [ ] **E.4** `listar_staff_club` — ver staff de un club específico.
+- [x] **E.1** `ver_estadisticas_sistema` — métricas globales del sistema. Sin parámetros. Llama a `GET /api/admin/estadisticas`.
+- [x] **E.2** `ver_deudas_profesores` — listado de profesores con deudas pendientes. Sin parámetros. Llama a `GET /api/admin/deudas`.
+- [x] **E.3** `listar_clubes` — ver todas las organizaciones registradas. Sin parámetros. Llama a `GET /api/admin/clubes`.
+- [x] **E.4** `listar_staff_club` — ver staff de un club específico.
   ```json
   { "organizacion_id": "uuid" }
   ```
@@ -207,21 +207,21 @@
 
 ## Fase F — Actualizar `supabase-tools.ts` y route `/api/ai/chat`
 
-- [ ] **F.1** Agregar tools de Fase C a `TOOLS_PROFESOR` (C.1–C.5).
-- [ ] **F.2** Agregar tools de Fase D a `TOOLS_ORGANIZADOR` (D.1–D.9).
-- [ ] **F.3** Crear `TOOLS_SUPERADMIN = [...TOOLS_ORGANIZADOR, ...TOOLS_SUPERADMIN_EXCLUSIVAS]` con tools de Fase E.
-- [ ] **F.4** Actualizar `executeToolCall` en `supabase-tools.ts` con los nuevos casos para cada nueva tool.
-- [ ] **F.5** Actualizar `getToolsForRol` en `/api/ai/chat/route.ts` para incluir caso `SuperAdmin`.
-- [ ] **F.6** Actualizar `buildSystemPrompt` para incluir prompt específico de SuperAdmin.
+- [x] **F.1** Agregar tools de Fase C a `TOOLS_PROFESOR` (C.1–C.5).
+- [x] **F.2** Agregar tools de Fase D a `TOOLS_ORGANIZADOR` (D.1–D.9).
+- [x] **F.3** Crear `TOOLS_SUPERADMIN = [...TOOLS_ORGANIZADOR, ...TOOLS_SUPERADMIN_EXCLUSIVAS]` con tools de Fase E.
+- [x] **F.4** Actualizar `executeToolCall` en `supabase-tools.ts` con los nuevos casos para cada nueva tool.
+- [x] **F.5** Actualizar `getToolsForRol` en `/api/ai/chat/route.ts` para incluir caso `SuperAdmin`.
+- [x] **F.6** Actualizar `buildSystemPrompt` para incluir prompt específico de SuperAdmin.
 
 ---
 
 ## Fase G — Actualizar Sidebar y navegación
 
-- [ ] **G.1** Actualizar `handleRoleSwitch` para Profesor → `/profesor/chat` y Organizador → `/organizador/chat`.
-- [ ] **G.2** Actualizar `getNavItems()` en Sidebar: agregar Chat como primer ítem en Profesor, Organizador y SuperAdmin.
-- [ ] **G.3** Crear `/profesor/page.tsx` → `redirect('/profesor/chat')`.
-- [ ] **G.4** Verificar si existe `/organizador/page.tsx` y agregar redirect si no.
+- [x] **G.1** Actualizar `handleRoleSwitch` para Profesor → `/profesor/chat` y Organizador → `/organizador/chat`.
+- [x] **G.2** Actualizar `getNavItems()` en Sidebar: agregar Chat como primer ítem en Profesor, Organizador y SuperAdmin.
+- [x] **G.3** Crear `/profesor/page.tsx` → `redirect('/profesor/chat')`.
+- [x] **G.4** Verificar si existe `/organizador/page.tsx` y agregar redirect si no.
 
 ---
 

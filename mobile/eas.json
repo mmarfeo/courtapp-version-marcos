@@ -20,7 +20,12 @@
       }
     },
     "production": {
-      "channel": "production"
+      "channel": "production",
+      "env": {
+        "EXPO_PUBLIC_SUPABASE_URL": "https://zakzstvetywoyokzympg.supabase.co",
+        "EXPO_PUBLIC_SUPABASE_ANON_KEY": "sb_publishable_bjHPgEcCGNc58f4F9EOKfg_BchC53br",
+        "EXPO_PUBLIC_API_URL": "https://court-up-mu.vercel.app/"
+      }
     }
   },
   "submit": {

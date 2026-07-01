@@ -10,6 +10,7 @@ import {
   StatusBar,
   TextInput,
   ScrollView,
+  useColorScheme,
 } from 'react-native';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -45,8 +46,16 @@ const DEPORTE_ICON: Record<string, string> = {
 
 const CATEGORIES = ['Todas', 'SuperA', 'A+', 'A', 'B+', 'B', 'C+', 'C', 'D'];
 
+const getBaseTournamentName = (name: string) => {
+  if (!name) return '';
+  const regex = /\s*-\s*Cat\s+|\s*-\s*Categor[ií]a\s+|\s+Cat\s+|\s*-\s*/i;
+  const parts = name.split(regex);
+  return parts[0].trim();
+};
+
 export default function TorneosJugadorScreen() {
   const theme = useTheme();
+  const scheme = useColorScheme();
   const { user } = useAuth();
   const [torneos, setTorneos] = useState<Torneo[]>([]);
   const [inscritosIds, setInscritosIds] = useState<string[]>([]);
@@ -134,56 +143,117 @@ export default function TorneosJugadorScreen() {
     return true;
   });
 
-  const renderTorneo = ({ item }: { item: Torneo }) => {
-    const estado = ESTADO_BADGE[item.estado] || { label: item.estado, color: '#fff', bg: '#6b7280' };
+  const groupedTorneos = React.useMemo(() => {
+    const groups: Record<string, {
+      baseName: string;
+      deporte: string;
+      fecha_inicio: string;
+      club?: { nombre: string };
+      categorias: { id: string; categoria: string; estado: string }[];
+    }> = {};
+
+    filteredTorneos.forEach(torneo => {
+      const baseName = getBaseTournamentName(torneo.nombre);
+      const key = `${baseName}_${torneo.deporte}_${torneo.club?.nombre || ''}`;
+
+      if (!groups[key]) {
+        groups[key] = {
+          baseName,
+          deporte: torneo.deporte,
+          fecha_inicio: torneo.fecha_inicio,
+          club: torneo.club,
+          categorias: []
+        };
+      }
+
+      groups[key].categorias.push({
+        id: torneo.id,
+        categoria: torneo.categoria_torneo,
+        estado: torneo.estado
+      });
+    });
+
+    const result = Object.values(groups);
+    result.forEach(g => {
+      g.categorias.sort((a, b) => a.categoria.localeCompare(b.categoria));
+    });
+    return result;
+  }, [filteredTorneos]);
+
+  const renderGroupedTorneo = ({ item }: { item: any }) => {
     const icon = DEPORTE_ICON[item.deporte] || '🏅';
     const fechaInicio = item.fecha_inicio
       ? new Date(item.fecha_inicio).toLocaleDateString('es-AR', { day: '2-digit', month: 'short' })
       : '--';
 
     return (
-      <TouchableOpacity
-        style={[styles.card, { backgroundColor: theme.card, borderColor: theme.border }, Shadow.sm]}
-        onPress={() => router.push(`/(jugador)/torneo/${item.id}` as any)}
-        activeOpacity={0.8}
-      >
+      <View style={[styles.card, { backgroundColor: theme.card, borderColor: theme.border }, Shadow.sm]}>
         <View style={styles.cardHeader}>
           <Text style={styles.sportIcon}>{icon}</Text>
           <View style={styles.cardInfo}>
             <Text style={[styles.cardTitle, { color: theme.text }]} numberOfLines={1}>
-              {item.nombre}
+              {item.baseName}
             </Text>
             <Text style={[styles.cardClub, { color: theme.textSecondary }]}>
               {item.club?.nombre || 'Club'} · {fechaInicio}
             </Text>
           </View>
-          <View style={[styles.badge, { backgroundColor: estado.bg }]}>
-            <Text style={[styles.badgeText, { color: estado.color }]}>{estado.label}</Text>
-          </View>
         </View>
+
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, paddingHorizontal: Spacing.base, paddingBottom: Spacing.base }}>
+          {item.categorias.map((cat: any) => (
+            <TouchableOpacity
+              key={cat.id}
+              style={{
+                flexDirection: 'row',
+                alignItems: 'center',
+                backgroundColor: Brand.orange + '10',
+                borderColor: Brand.orange,
+                borderWidth: 1,
+                borderRadius: Radius.full,
+                paddingHorizontal: Spacing.md,
+                paddingVertical: 6,
+                gap: 4
+              }}
+              onPress={() => router.push(`/(jugador)/torneo/${cat.id}` as any)}
+            >
+              <Text style={{ fontSize: 12, fontWeight: '700', color: Brand.orange }}>
+                Cat {cat.categoria}
+              </Text>
+              <Ionicons name="add-circle-outline" size={14} color={Brand.orange} />
+            </TouchableOpacity>
+          ))}
+        </View>
+
         <View style={[styles.cardFooter, { borderTopColor: theme.border }]}>
           <Text style={[styles.cardDeporte, { color: theme.textMuted }]}>
-            {item.deporte?.charAt(0).toUpperCase() + item.deporte?.slice(1)} · Cat {item.categoria_torneo}
+            {item.deporte?.charAt(0).toUpperCase() + item.deporte?.slice(1)}
           </Text>
-          <Ionicons name="chevron-forward" size={16} color={theme.textMuted} />
+          <Text style={{ fontSize: 12, color: theme.textMuted }}>
+            Selecciona una categoría para inscribirte
+          </Text>
         </View>
-      </TouchableOpacity>
+      </View>
     );
   };
 
+  const isDark = scheme === 'dark';
+
   return (
     <View style={[styles.container, { backgroundColor: theme.background }]}>
-      <StatusBar barStyle="light-content" backgroundColor="#0a0a0a" />
+      <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} backgroundColor={theme.background} />
 
       {/* Header */}
-      <View style={[styles.header, { backgroundColor: '#0a0a0a' }]}>
+      <View style={[styles.header, { backgroundColor: theme.background, borderBottomWidth: 1, borderBottomColor: theme.border }]}>
         <View>
-          <Text style={styles.headerGreeting}>
+          <Text style={[styles.headerGreeting, { color: theme.textSecondary }]}>
             Hola, {user?.nombre || 'Jugador'} 👋
           </Text>
-          <Text style={styles.headerTitle}>Torneos vigentes</Text>
+          <Text style={[styles.headerTitle, { color: theme.text }]}>Torneos vigentes</Text>
         </View>
       </View>
+
+
 
       {/* Search & Filters */}
       <View style={[styles.filtersSection, { backgroundColor: theme.card, borderBottomColor: theme.border }]}>
@@ -282,9 +352,9 @@ export default function TorneosJugadorScreen() {
         </View>
       ) : (
         <FlatList
-          data={filteredTorneos}
-          renderItem={renderTorneo}
-          keyExtractor={(item) => item.id}
+          data={groupedTorneos}
+          renderItem={renderGroupedTorneo}
+          keyExtractor={(item) => item.baseName + '_' + item.deporte + '_' + (item.club?.nombre || '')}
           contentContainerStyle={styles.list}
           refreshControl={
             <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={Brand.green} />
@@ -299,6 +369,30 @@ export default function TorneosJugadorScreen() {
           }
         />
       )}
+      {/* Floating Chat Bubble */}
+      <TouchableOpacity
+        style={{
+          position: 'absolute',
+          bottom: 20,
+          right: 20,
+          width: 56,
+          height: 56,
+          borderRadius: 28,
+          backgroundColor: Brand.orange,
+          justifyContent: 'center',
+          alignItems: 'center',
+          elevation: 5,
+          shadowColor: '#000',
+          shadowOffset: { width: 0, height: 2 },
+          shadowOpacity: 0.25,
+          shadowRadius: 3.84,
+          zIndex: 9999,
+        }}
+        onPress={() => router.push('/(jugador)/chat')}
+        activeOpacity={0.8}
+      >
+        <Ionicons name="chatbubbles" size={24} color="#fff" />
+      </TouchableOpacity>
     </View>
   );
 }

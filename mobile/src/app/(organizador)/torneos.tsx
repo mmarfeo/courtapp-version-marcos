@@ -35,10 +35,17 @@ const ESTADOS: Record<string, { label: string; color: string }> = {
   Final: { label: 'Final', color: '#f59e0b' },
 };
 
+const getBaseTournamentName = (name: string) => {
+  if (!name) return '';
+  const regex = /\s*-\s*Cat\s+|\s*-\s*Categor[ií]a\s+|\s+Cat\s+|\s*-\s*/i;
+  const parts = name.split(regex);
+  return parts[0].trim();
+};
+
 export default function OrganizadorTorneosScreen() {
   const theme = useTheme();
   const { user } = useAuth();
-  const [torneos, setTorneos] = useState<Torneo[]>([]);
+  const [torneos, setTorneos] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
@@ -51,7 +58,7 @@ export default function OrganizadorTorneosScreen() {
     try {
       const { data, error } = await supabase
         .from('torneos')
-        .select('id, nombre:nombre_torneo, deporte, estado:fase_actual, fecha_inicio')
+        .select('id, nombre:nombre_torneo, deporte, estado:fase_actual, fecha_inicio, categoria_torneo')
         .eq('organizacion_id', user.club_id)
         .order('creado_at', { ascending: false });
       
@@ -79,18 +86,48 @@ export default function OrganizadorTorneosScreen() {
     return matchesSearch && matchesSport;
   });
 
-  const renderTorneo = ({ item }: { item: Torneo }) => {
-    const estado = ESTADOS[item.estado] || { label: item.estado, color: '#6b7280' };
+  const groupedTorneos = React.useMemo(() => {
+    const groups: Record<string, {
+      baseName: string;
+      deporte: string;
+      fecha_inicio: string;
+      categorias: { id: string; categoria: string; estado: string }[];
+    }> = {};
+
+    filteredTorneos.forEach(torneo => {
+      const baseName = getBaseTournamentName(torneo.nombre);
+      const key = `${baseName}_${torneo.deporte}`;
+
+      if (!groups[key]) {
+        groups[key] = {
+          baseName,
+          deporte: torneo.deporte,
+          fecha_inicio: torneo.fecha_inicio,
+          categorias: []
+        };
+      }
+
+      groups[key].categorias.push({
+        id: torneo.id,
+        categoria: torneo.categoria_torneo,
+        estado: torneo.estado
+      });
+    });
+
+    const result = Object.values(groups);
+    result.forEach(g => {
+      g.categorias.sort((a, b) => a.categoria.localeCompare(b.categoria));
+    });
+    return result;
+  }, [filteredTorneos]);
+
+  const renderGroupedTorneo = ({ item }: { item: any }) => {
     return (
-      <TouchableOpacity
-        style={[styles.card, { backgroundColor: theme.card, borderColor: theme.border }, Shadow.sm]}
-        onPress={() => router.push(`/(organizador)/torneo/${item.id}` as any)}
-        activeOpacity={0.8}
-      >
+      <View style={[styles.card, { backgroundColor: theme.card, borderColor: theme.border }, Shadow.sm]}>
         <View style={styles.cardTop}>
           <View style={styles.cardInfo}>
             <Text style={[styles.cardTitle, { color: theme.text }]} numberOfLines={1}>
-              {item.nombre}
+              {item.baseName}
             </Text>
             <Text style={[styles.cardDeporte, { color: theme.textSecondary }]}>
               {item.deporte?.charAt(0).toUpperCase() + item.deporte?.slice(1)} ·{' '}
@@ -99,17 +136,42 @@ export default function OrganizadorTorneosScreen() {
                 : '--'}
             </Text>
           </View>
-          <View style={[styles.estadoBadge, { backgroundColor: estado.color + '20', borderColor: estado.color }]}>
-            <Text style={[styles.estadoText, { color: estado.color }]}>{estado.label}</Text>
-          </View>
         </View>
+
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, paddingHorizontal: Spacing.base, paddingBottom: Spacing.base }}>
+          {item.categorias.map((cat: any) => {
+            const estado = ESTADOS[cat.estado] || { label: cat.estado, color: '#6b7280' };
+            return (
+              <TouchableOpacity
+                key={cat.id}
+                style={{
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  backgroundColor: Brand.orange + '10',
+                  borderColor: Brand.orange,
+                  borderWidth: 1,
+                  borderRadius: Radius.full,
+                  paddingHorizontal: Spacing.md,
+                  paddingVertical: 6,
+                  gap: 4
+                }}
+                onPress={() => router.push(`/(organizador)/torneo/${cat.id}` as any)}
+              >
+                <Text style={{ fontSize: 12, fontWeight: '700', color: Brand.orange }}>
+                  Cat {cat.categoria} ({estado.label})
+                </Text>
+                <Ionicons name="chevron-forward" size={12} color={Brand.orange} />
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+
         <View style={[styles.cardFooter, { borderTopColor: theme.border }]}>
           <Text style={[styles.footerText, { color: theme.textMuted }]}>
-            Ver detalles del torneo
+            Selecciona una categoría para ver detalles y gestionar
           </Text>
-          <Ionicons name="chevron-forward" size={16} color={theme.textMuted} />
         </View>
-      </TouchableOpacity>
+      </View>
     );
   };
 
@@ -172,9 +234,9 @@ export default function OrganizadorTorneosScreen() {
         </View>
       ) : (
         <FlatList
-          data={filteredTorneos}
-          renderItem={renderTorneo}
-          keyExtractor={(item) => item.id}
+          data={groupedTorneos}
+          renderItem={renderGroupedTorneo}
+          keyExtractor={(item) => item.baseName + '_' + item.deporte}
           contentContainerStyle={styles.list}
           refreshControl={
             <RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); fetchTorneos(); }} tintColor={Brand.green} />

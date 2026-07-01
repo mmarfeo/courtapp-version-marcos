@@ -12,6 +12,51 @@ serve(async (req) => {
   }
 
   try {
+    const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
+    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
+    const anonKey = Deno.env.get("SUPABASE_ANON_KEY") ?? "";
+
+    // 1. Verificar autenticación del emisor
+    const authHeader = req.headers.get("Authorization");
+    if (!authHeader) {
+      return new Response(JSON.stringify({ success: false, error: "No autorizado: Faltan credenciales" }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 401
+      });
+    }
+
+    const client = createClient(supabaseUrl, anonKey, {
+      global: { headers: { Authorization: authHeader } }
+    });
+
+    const { data: { user }, error: authError } = await client.auth.getUser();
+    if (authError || !user) {
+      return new Response(JSON.stringify({ success: false, error: "No autorizado: Token inválido" }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 401
+      });
+    }
+
+    // Cliente Admin: Para crear el usuario en Auth (bypass RLS) y verificar roles
+    const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey);
+
+    // 2. Verificar rol de administrador o organizador del emisor
+    const { data: callerProfile } = await supabaseAdmin
+      .from('perfiles_usuarios')
+      .select('rol, roles')
+      .eq('id', user.id)
+      .single();
+
+    const isSuperAdmin = callerProfile?.rol === 'SuperAdmin' || callerProfile?.roles?.includes('SuperAdmin');
+    const isOrganizador = callerProfile?.rol === 'Organizador' || callerProfile?.roles?.includes('Organizador');
+
+    if (!isSuperAdmin && !isOrganizador) {
+      return new Response(JSON.stringify({ success: false, error: "Acceso denegado: Se requiere rol de SuperAdmin u Organizador" }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 403
+      });
+    }
+
     const body = await req.json();
     const { email, password, nombre, organizacion_ids } = body;
 
@@ -34,12 +79,6 @@ serve(async (req) => {
     if (!rolesArray.includes('Jugador')) {
       rolesArray.push('Jugador');
     }
-
-    const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
-    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
-    
-    // Cliente Admin: Para crear el usuario en Auth (bypass RLS)
-    const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey);
 
     let newUserId: string = "";
     let isNewUser = false;

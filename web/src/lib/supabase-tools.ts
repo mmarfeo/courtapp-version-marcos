@@ -759,7 +759,7 @@ export async function executeToolCall(toolCall: ToolCall, userToken?: string): P
       case 'consultar_canchas': {
         let q = supabase
           .from('canchas')
-          .select('id, numero_cancha, deporte, superficie, precio_hora_dia, precio_hora_noche, hora_inicio_noche, activa');
+          .select('id, numero_cancha, deporte, superficie, precio_hora_dia, precio_hora_noche, hora_inicio_noche, activa, nombre_club, organizaciones(nombre)');
         if (args.deporte) q = q.eq('deporte', args.deporte) as typeof q;
         if (args.solo_activas !== false) q = q.eq('activa', true) as typeof q;
         q = q.order('numero_cancha', { ascending: true }) as typeof q;
@@ -788,7 +788,7 @@ export async function executeToolCall(toolCall: ToolCall, userToken?: string): P
         // Canchas activas
         let qCanchas = supabase
           .from('canchas')
-          .select('id, numero_cancha, deporte, superficie, precio_hora_dia, precio_hora_noche')
+          .select('id, numero_cancha, deporte, superficie, precio_hora_dia, precio_hora_noche, nombre_club, organizaciones(nombre)')
           .eq('activa', true);
         if (deporte) qCanchas = qCanchas.eq('deporte', deporte) as typeof qCanchas;
         const { data: canchas } = await qCanchas;
@@ -828,7 +828,7 @@ export async function executeToolCall(toolCall: ToolCall, userToken?: string): P
         const hoy = new Date().toISOString().split('T')[0];
         let q = supabase
           .from('alquileres_cancha')
-          .select('id, fecha, hora_inicio, hora_fin, monto_total, estado_pago, es_semanal, cancha:canchas(numero_cancha, deporte, superficie)')
+          .select('id, fecha, hora_inicio, hora_fin, monto_total, estado_pago, es_semanal, cancha:canchas(numero_cancha, deporte, superficie, nombre_club, organizaciones(nombre))')
           .eq('usuario_id', userId)
           .gte('fecha', (args.fecha_desde as string) || hoy)
           .order('fecha', { ascending: true })
@@ -849,7 +849,8 @@ export async function executeToolCall(toolCall: ToolCall, userToken?: string): P
           .select(`
             id, fecha, hora_inicio, hora_fin, cupo_maximo, precio_clase, deporte, categoria_target, activa,
             profesor:perfiles_usuarios!clases_disponibles_profesor_id_fkey(nombre, foto_url),
-            cancha:canchas(numero_cancha, superficie)
+            cancha:canchas(numero_cancha, superficie, nombre_club, organizaciones(nombre)),
+            organizaciones(nombre)
           `)
           .eq('activa', true)
           .gte('fecha', (args.fecha_desde as string) || hoy)
@@ -880,7 +881,8 @@ export async function executeToolCall(toolCall: ToolCall, userToken?: string): P
             id, created_at, estado_pago, monto_total_pagado,
             clase:clases_disponibles(
               id, fecha, hora_inicio, hora_fin, deporte, categoria_target,
-              profesor:perfiles_usuarios!clases_disponibles_profesor_id_fkey(nombre)
+              profesor:perfiles_usuarios!clases_disponibles_profesor_id_fkey(nombre),
+              organizaciones(nombre)
             )
           `)
           .eq('alumno_id', userId)
@@ -896,7 +898,7 @@ export async function executeToolCall(toolCall: ToolCall, userToken?: string): P
       case 'buscar_torneos': {
         let q = supabase
           .from('torneos')
-          .select('id, nombre_torneo, categoria_torneo, deporte, fase_actual, activo, tarifas_torneo(precio_single, precio_dobles, precio_ambos)')
+          .select('id, nombre_torneo, categoria_torneo, deporte, fase_actual, activo, organizaciones(nombre), tarifas_torneo(precio_single, precio_dobles, precio_ambos)')
           .eq('activo', true)
           .order('creado_at', { ascending: false });
         if (args.deporte) q = q.eq('deporte', args.deporte) as typeof q;

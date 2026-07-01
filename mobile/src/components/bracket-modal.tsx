@@ -52,20 +52,29 @@ export function BracketModal({ visible, torneoId, torneoNombre, onClose }: Brack
         .select(`
           id, ronda, estado, fecha_hora, ganador_pareja,
           resultado_set1, resultado_set2, resultado_set3,
-          pareja1:parejas!partidos_pareja1_id_fkey(
-            jugador1:usuarios!parejas_jugador1_id_fkey(nombre, apellido),
-            jugador2:usuarios!parejas_jugador2_id_fkey(nombre, apellido)
-          ),
-          pareja2:parejas!partidos_pareja2_id_fkey(
-            jugador1:usuarios!parejas_jugador1_id_fkey(nombre, apellido),
-            jugador2:usuarios!parejas_jugador2_id_fkey(nombre, apellido)
-          )
+          p1_jugador_1:perfiles_usuarios!p1_jugador_1_id(nombre),
+          p1_jugador_2:perfiles_usuarios!p1_jugador_2_id(nombre),
+          p2_jugador_1:perfiles_usuarios!p2_jugador_1_id(nombre),
+          p2_jugador_2:perfiles_usuarios!p2_jugador_2_id(nombre)
         `)
         .eq('torneo_id', torneoId)
         .order('ronda', { ascending: true });
 
       if (error) throw error;
-      setPartidos((data as any) || []);
+
+      const formatted = (data || []).map((p: any) => ({
+        ...p,
+        pareja1: p.p1_jugador_1 ? {
+          jugador1: p.p1_jugador_1,
+          jugador2: p.p1_jugador_2
+        } : null,
+        pareja2: p.p2_jugador_1 ? {
+          jugador1: p.p2_jugador_1,
+          jugador2: p.p2_jugador_2
+        } : null
+      }));
+
+      setPartidos(formatted);
     } catch (e) {
       console.error('Error fetching partidos:', e);
     } finally {
