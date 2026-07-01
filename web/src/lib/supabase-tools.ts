@@ -239,7 +239,7 @@ const TOOLS_PROFESOR = [
     type: 'function',
     function: {
       name: 'buscar_canchas_disponibles',
-      description: 'Muestra qué canchas están libres en un horario. Usalo antes de crear una clase.',
+      description: 'Muestra qué canchas están libres en un horario. Usalo antes de crear una clase o reservar.',
       parameters: {
         type: 'object',
         required: ['fecha', 'hora_inicio', 'hora_fin'],
@@ -269,6 +269,25 @@ const TOOLS_PROFESOR = [
           precio_clase: { type: 'number', description: 'Precio de la clase en pesos' },
           cupo_maximo: { type: 'number', description: 'Cupo máximo de alumnos (default: 1)' },
           deporte: { type: 'string', enum: ['Tenis', 'Padel'] },
+        },
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'editar_clase',
+      description: 'Modifica una clase existente del profesor (precio, cupo, horario, categoría). Confirmá cambios antes.',
+      parameters: {
+        type: 'object',
+        required: ['clase_id'],
+        properties: {
+          clase_id: { type: 'number', description: 'ID de la clase a editar' },
+          precio_clase: { type: 'number', description: 'Nuevo precio en pesos (opcional)' },
+          cupo_maximo: { type: 'number', description: 'Nuevo cupo máximo (opcional)' },
+          hora_inicio: { type: 'string', description: 'Nueva hora de inicio HH:MM:SS (opcional)' },
+          hora_fin: { type: 'string', description: 'Nueva hora de fin HH:MM:SS (opcional)' },
+          categoria_target: { type: 'string', description: 'Nueva categoría (opcional)' },
         },
       },
     },
@@ -328,6 +347,55 @@ const TOOLS_PROFESOR = [
           fecha_hasta: { type: 'string', description: 'Filtrar hasta YYYY-MM-DD (opcional)' },
         },
       },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'crear_reserva_cancha',
+      description: 'Reserva una cancha para el profesor. Verificar disponibilidad antes con buscar_canchas_disponibles.',
+      parameters: {
+        type: 'object',
+        required: ['cancha_id', 'fecha', 'hora_inicio', 'hora_fin'],
+        properties: {
+          cancha_id: { type: 'number', description: 'ID de la cancha' },
+          fecha: { type: 'string', description: 'Fecha YYYY-MM-DD' },
+          hora_inicio: { type: 'string', description: 'Hora de inicio HH:MM:SS' },
+          hora_fin: { type: 'string', description: 'Hora de fin HH:MM:SS' },
+          es_semanal: { type: 'boolean', description: 'Si true, reserva recurrente semanal' },
+          fecha_fin_recurrencia: { type: 'string', description: 'Fecha límite de recurrencia YYYY-MM-DD' },
+        },
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'cancelar_reserva_cancha',
+      description: 'Cancela una reserva de cancha propia. SIEMPRE pedí confirmación antes.',
+      parameters: {
+        type: 'object',
+        required: ['alquiler_id'],
+        properties: {
+          alquiler_id: { type: 'number', description: 'ID del alquiler (obtenelo de ver_mis_alquileres_como_profesor)' },
+        },
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'ver_mis_ingresos',
+      description: 'Muestra el resumen de ingresos del mes actual del profesor (clases + alquileres cobrados).',
+      parameters: { type: 'object', properties: {} },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'ver_mi_deuda',
+      description: 'Muestra los alquileres de cancha aprobados que el profesor tiene pendientes de pago con el club.',
+      parameters: { type: 'object', properties: {} },
     },
   },
 ];
@@ -430,10 +498,201 @@ const TOOLS_ORGANIZADOR = [
       },
     },
   },
+  {
+    type: 'function',
+    function: {
+      name: 'crear_torneo',
+      description: 'Crea un nuevo torneo en el club. Confirmá todos los datos antes de ejecutar.',
+      parameters: {
+        type: 'object',
+        required: ['nombre_torneo', 'deporte', 'categoria_torneo', 'precio_single'],
+        properties: {
+          nombre_torneo: { type: 'string', description: 'Nombre del torneo' },
+          deporte: { type: 'string', enum: ['Tenis', 'Padel'] },
+          categoria_torneo: { type: 'string', description: 'Categoría: SuperA, A+, A, B+, B, C+, C, D' },
+          precio_single: { type: 'number', description: 'Precio inscripción single' },
+          precio_dobles: { type: 'number', description: 'Precio inscripción dobles (opcional)' },
+          precio_ambos: { type: 'number', description: 'Precio para single + dobles (opcional)' },
+        },
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'cambiar_fase_torneo',
+      description: 'Avanza el torneo a la siguiente fase. Las fases en orden son: Inscripcion → Zonas → Cuartos → Semifinal → Final → Terminado.',
+      parameters: {
+        type: 'object',
+        required: ['torneo_id', 'nueva_fase'],
+        properties: {
+          torneo_id: { type: 'number', description: 'ID del torneo' },
+          nueva_fase: { type: 'string', enum: ['Inscripcion', 'Zonas', 'Cuartos', 'Semifinal', 'Final', 'Terminado'] },
+        },
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'listar_partidos_torneo',
+      description: 'Lista los partidos de un torneo con sus jugadores y estado.',
+      parameters: {
+        type: 'object',
+        required: ['torneo_id'],
+        properties: {
+          torneo_id: { type: 'number', description: 'ID del torneo' },
+          estado: { type: 'string', enum: ['pendiente', 'jugado', 'todos'], description: 'Filtrar por estado (default: todos)' },
+        },
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'asignar_partido',
+      description: 'Asigna fecha, hora y cancha a un partido pendiente.',
+      parameters: {
+        type: 'object',
+        required: ['partido_id', 'fecha', 'hora', 'cancha_id'],
+        properties: {
+          partido_id: { type: 'number', description: 'ID del partido' },
+          fecha: { type: 'string', description: 'Fecha YYYY-MM-DD' },
+          hora: { type: 'string', description: 'Hora HH:MM' },
+          cancha_id: { type: 'number', description: 'ID de la cancha' },
+        },
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'registrar_resultado',
+      description: 'Registra el resultado de un partido jugado.',
+      parameters: {
+        type: 'object',
+        required: ['partido_id', 'resultado_set1', 'ganador_pareja'],
+        properties: {
+          partido_id: { type: 'number', description: 'ID del partido' },
+          resultado_set1: { type: 'string', description: 'Resultado set 1 (ej: "6-4")' },
+          resultado_set2: { type: 'string', description: 'Resultado set 2 (ej: "6-3")' },
+          resultado_set3: { type: 'string', description: 'Resultado set 3 si hubo (ej: "7-5")' },
+          ganador_pareja: { type: 'number', enum: [1, 2], description: 'Pareja ganadora: 1 o 2' },
+        },
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'crear_cancha',
+      description: 'Crea una nueva cancha en el club. Confirmá todos los datos antes de ejecutar.',
+      parameters: {
+        type: 'object',
+        required: ['numero_cancha', 'deporte', 'precio_hora_dia'],
+        properties: {
+          numero_cancha: { type: 'number', description: 'Número identificador de la cancha' },
+          deporte: { type: 'string', enum: ['Tenis', 'Padel'] },
+          superficie: { type: 'string', description: 'Superficie (ej: Arcilla, Cemento, Sintética)' },
+          precio_hora_dia: { type: 'number', description: 'Precio por hora diurno' },
+          precio_hora_noche: { type: 'number', description: 'Precio por hora nocturno (opcional)' },
+          hora_inicio_noche: { type: 'string', description: 'Hora inicio tarifa noche HH:MM (opcional)' },
+        },
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'editar_cancha',
+      description: 'Modifica datos de una cancha existente del club.',
+      parameters: {
+        type: 'object',
+        required: ['cancha_id'],
+        properties: {
+          cancha_id: { type: 'number', description: 'ID de la cancha' },
+          precio_hora_dia: { type: 'number', description: 'Nuevo precio diurno (opcional)' },
+          precio_hora_noche: { type: 'number', description: 'Nuevo precio nocturno (opcional)' },
+          hora_inicio_noche: { type: 'string', description: 'Nueva hora inicio noche HH:MM (opcional)' },
+          superficie: { type: 'string', description: 'Nueva superficie (opcional)' },
+          activa: { type: 'boolean', description: 'Activar/desactivar cancha (opcional)' },
+        },
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'cancelar_reserva_organizador',
+      description: 'Cancela cualquier reserva de cancha del club (como organizador). SIEMPRE pedí confirmación antes.',
+      parameters: {
+        type: 'object',
+        required: ['alquiler_id'],
+        properties: {
+          alquiler_id: { type: 'number', description: 'ID del alquiler a cancelar' },
+        },
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'cancelar_clase_organizador',
+      description: 'Cancela una clase del club (como organizador). SIEMPRE pedí confirmación antes.',
+      parameters: {
+        type: 'object',
+        required: ['clase_id'],
+        properties: {
+          clase_id: { type: 'number', description: 'ID de la clase a cancelar' },
+        },
+      },
+    },
+  },
+];
+
+const TOOLS_SUPERADMIN = [
+  ...TOOLS_ORGANIZADOR,
+  {
+    type: 'function',
+    function: {
+      name: 'ver_estadisticas_sistema',
+      description: 'Muestra estadísticas globales del sistema: clubs, usuarios, torneos, partidos e ingresos del mes.',
+      parameters: { type: 'object', properties: {} },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'ver_deudas_profesores',
+      description: 'Lista los profesores con deuda pendiente de pago por alquileres de cancha aprobados.',
+      parameters: { type: 'object', properties: {} },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'listar_clubs',
+      description: 'Lista todos los clubs/organizaciones registrados en la plataforma.',
+      parameters: { type: 'object', properties: {} },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'listar_staff_club',
+      description: 'Lista el staff de un club (miembros y sus roles). Requiere organizacion_id para ver un club específico.',
+      parameters: {
+        type: 'object',
+        properties: {
+          organizacion_id: { type: 'string', description: 'UUID del club a consultar (opcional, si no se provee muestra todos)' },
+        },
+      },
+    },
+  },
 ];
 
 // Exportar grupos por rol
-export { TOOLS_JUGADOR, TOOLS_PROFESOR, TOOLS_ORGANIZADOR };
+export { TOOLS_JUGADOR, TOOLS_PROFESOR, TOOLS_ORGANIZADOR, TOOLS_SUPERADMIN };
 
 // Compatibilidad con código existente (usa todas las tools)
 export const SUPABASE_TOOLS = TOOLS_JUGADOR;
@@ -483,6 +742,15 @@ export async function executeToolCall(toolCall: ToolCall, userToken?: string): P
     return JSON.stringify(await res.json());
   }
 
+  async function callApiGet(path: string) {
+    if (!userToken) return JSON.stringify({ error: 'Necesitás iniciar sesión.' });
+    const res = await fetch(`${appUrl}${path}`, {
+      method: 'GET',
+      headers: { Authorization: `Bearer ${userToken}` },
+    });
+    return JSON.stringify(await res.json());
+  }
+
   try {
     switch (name) {
 
@@ -491,7 +759,7 @@ export async function executeToolCall(toolCall: ToolCall, userToken?: string): P
       case 'consultar_canchas': {
         let q = supabase
           .from('canchas')
-          .select('id, numero_cancha, deporte, superficie, precio_hora_dia, precio_hora_noche, hora_inicio_noche, activa');
+          .select('id, numero_cancha, deporte, superficie, precio_hora_dia, precio_hora_noche, hora_inicio_noche, activa, nombre_club, organizaciones(nombre)');
         if (args.deporte) q = q.eq('deporte', args.deporte) as typeof q;
         if (args.solo_activas !== false) q = q.eq('activa', true) as typeof q;
         q = q.order('numero_cancha', { ascending: true }) as typeof q;
@@ -520,7 +788,7 @@ export async function executeToolCall(toolCall: ToolCall, userToken?: string): P
         // Canchas activas
         let qCanchas = supabase
           .from('canchas')
-          .select('id, numero_cancha, deporte, superficie, precio_hora_dia, precio_hora_noche')
+          .select('id, numero_cancha, deporte, superficie, precio_hora_dia, precio_hora_noche, nombre_club, organizaciones(nombre)')
           .eq('activa', true);
         if (deporte) qCanchas = qCanchas.eq('deporte', deporte) as typeof qCanchas;
         const { data: canchas } = await qCanchas;
@@ -560,7 +828,7 @@ export async function executeToolCall(toolCall: ToolCall, userToken?: string): P
         const hoy = new Date().toISOString().split('T')[0];
         let q = supabase
           .from('alquileres_cancha')
-          .select('id, fecha, hora_inicio, hora_fin, monto_total, estado_pago, es_semanal, cancha:canchas(numero_cancha, deporte, superficie)')
+          .select('id, fecha, hora_inicio, hora_fin, monto_total, estado_pago, es_semanal, cancha:canchas(numero_cancha, deporte, superficie, nombre_club, organizaciones(nombre))')
           .eq('usuario_id', userId)
           .gte('fecha', (args.fecha_desde as string) || hoy)
           .order('fecha', { ascending: true })
@@ -581,7 +849,8 @@ export async function executeToolCall(toolCall: ToolCall, userToken?: string): P
           .select(`
             id, fecha, hora_inicio, hora_fin, cupo_maximo, precio_clase, deporte, categoria_target, activa,
             profesor:perfiles_usuarios!clases_disponibles_profesor_id_fkey(nombre, foto_url),
-            cancha:canchas(numero_cancha, superficie)
+            cancha:canchas(numero_cancha, superficie, nombre_club, organizaciones(nombre)),
+            organizaciones(nombre)
           `)
           .eq('activa', true)
           .gte('fecha', (args.fecha_desde as string) || hoy)
@@ -612,7 +881,8 @@ export async function executeToolCall(toolCall: ToolCall, userToken?: string): P
             id, created_at, estado_pago, monto_total_pagado,
             clase:clases_disponibles(
               id, fecha, hora_inicio, hora_fin, deporte, categoria_target,
-              profesor:perfiles_usuarios!clases_disponibles_profesor_id_fkey(nombre)
+              profesor:perfiles_usuarios!clases_disponibles_profesor_id_fkey(nombre),
+              organizaciones(nombre)
             )
           `)
           .eq('alumno_id', userId)
@@ -628,7 +898,7 @@ export async function executeToolCall(toolCall: ToolCall, userToken?: string): P
       case 'buscar_torneos': {
         let q = supabase
           .from('torneos')
-          .select('id, nombre_torneo, categoria_torneo, deporte, fase_actual, activo, tarifas_torneo(precio_single, precio_dobles, precio_ambos)')
+          .select('id, nombre_torneo, categoria_torneo, deporte, fase_actual, activo, organizaciones(nombre), tarifas_torneo(precio_single, precio_dobles, precio_ambos)')
           .eq('activo', true)
           .order('creado_at', { ascending: false });
         if (args.deporte) q = q.eq('deporte', args.deporte) as typeof q;
@@ -724,8 +994,24 @@ export async function executeToolCall(toolCall: ToolCall, userToken?: string): P
         return JSON.stringify(data ?? []);
       }
 
+      case 'editar_clase':
+        return callApi('/api/clases/editar', {
+          clase_id: args.clase_id,
+          ...(args.precio_clase !== undefined && { precio_clase: args.precio_clase }),
+          ...(args.cupo_maximo !== undefined && { cupo_maximo: args.cupo_maximo }),
+          ...(args.hora_inicio !== undefined && { hora_inicio: args.hora_inicio }),
+          ...(args.hora_fin !== undefined && { hora_fin: args.hora_fin }),
+          ...(args.categoria_target !== undefined && { categoria_target: args.categoria_target }),
+        });
+
       case 'cancelar_clase':
         return callApi('/api/clases/cancelar-clase', { clase_id: args.clase_id });
+
+      case 'ver_mis_ingresos':
+        return callApiGet('/api/profesor/ingresos');
+
+      case 'ver_mi_deuda':
+        return callApiGet('/api/profesor/deuda');
 
       case 'ver_mis_alquileres_como_profesor': {
         if (!userToken) return JSON.stringify({ error: 'Necesitás iniciar sesión.' });
@@ -860,6 +1146,88 @@ export async function executeToolCall(toolCall: ToolCall, userToken?: string): P
         }
 
         return JSON.stringify(resultados);
+      }
+
+      // ── ORGANIZADOR (nuevas) ─────────────────────────────────────────────────
+
+      case 'crear_torneo':
+        return callApi('/api/torneos/crear', {
+          nombre_torneo: args.nombre_torneo,
+          deporte: args.deporte,
+          categoria_torneo: args.categoria_torneo,
+          precio_single: args.precio_single,
+          precio_dobles: args.precio_dobles ?? null,
+          precio_ambos: args.precio_ambos ?? null,
+        });
+
+      case 'cambiar_fase_torneo':
+        return callApi('/api/torneos/cambiar-fase', {
+          torneo_id: args.torneo_id,
+          nueva_fase: args.nueva_fase,
+        });
+
+      case 'listar_partidos_torneo': {
+        const estado = (args.estado as string) || 'todos';
+        return callApiGet(`/api/torneos/${args.torneo_id}/partidos?estado=${estado}`);
+      }
+
+      case 'asignar_partido':
+        return callApi('/api/partidos/asignar', {
+          partido_id: args.partido_id,
+          fecha: args.fecha,
+          hora: args.hora,
+          cancha_id: args.cancha_id,
+        });
+
+      case 'registrar_resultado':
+        return callApi('/api/partidos/resultado', {
+          partido_id: args.partido_id,
+          resultado_set1: args.resultado_set1,
+          resultado_set2: args.resultado_set2 ?? null,
+          resultado_set3: args.resultado_set3 ?? null,
+          ganador_pareja: args.ganador_pareja,
+        });
+
+      case 'crear_cancha':
+        return callApi('/api/canchas/crear', {
+          numero_cancha: args.numero_cancha,
+          deporte: args.deporte,
+          superficie: args.superficie ?? null,
+          precio_hora_dia: args.precio_hora_dia,
+          precio_hora_noche: args.precio_hora_noche ?? null,
+          hora_inicio_noche: args.hora_inicio_noche ?? null,
+        });
+
+      case 'editar_cancha':
+        return callApi('/api/canchas/editar', {
+          cancha_id: args.cancha_id,
+          ...(args.precio_hora_dia !== undefined && { precio_hora_dia: args.precio_hora_dia }),
+          ...(args.precio_hora_noche !== undefined && { precio_hora_noche: args.precio_hora_noche }),
+          ...(args.hora_inicio_noche !== undefined && { hora_inicio_noche: args.hora_inicio_noche }),
+          ...(args.superficie !== undefined && { superficie: args.superficie }),
+          ...(args.activa !== undefined && { activa: args.activa }),
+        });
+
+      case 'cancelar_reserva_organizador':
+        return callApi('/api/canchas/cancelar', { alquiler_id: args.alquiler_id });
+
+      case 'cancelar_clase_organizador':
+        return callApi('/api/clases/cancelar-clase', { clase_id: args.clase_id });
+
+      // ── SUPERADMIN ───────────────────────────────────────────────────────────
+
+      case 'ver_estadisticas_sistema':
+        return callApiGet('/api/admin/estadisticas');
+
+      case 'ver_deudas_profesores':
+        return callApiGet('/api/admin/deudas');
+
+      case 'listar_clubs':
+        return callApiGet('/api/admin/clubs');
+
+      case 'listar_staff_club': {
+        const qs = args.organizacion_id ? `?organizacion_id=${args.organizacion_id}` : '';
+        return callApiGet(`/api/admin/staff${qs}`);
       }
 
       default:

@@ -10,6 +10,7 @@ import {
   Alert,
   Modal,
   ScrollView,
+  TextInput,
 } from 'react-native';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -84,6 +85,18 @@ export default function CanchasScreen() {
   const [localAvail, setLocalAvail] = useState<{ [key: string]: boolean }>({});
   const [selectedAvailDay, setSelectedAvailDay] = useState<string>('lunes');
 
+  // Quick Reservation Modal State
+  const [quickBookingModalVisible, setQuickBookingModalVisible] = useState(false);
+  const [quickBookingData, setQuickBookingData] = useState<{
+    canchaId: number;
+    fecha: string;
+    horaInicio: string;
+    horaFin: string;
+  } | null>(null);
+  const [quickBookingName, setQuickBookingName] = useState('');
+  const [quickBookingType, setQuickBookingType] = useState<'Alquiler' | 'Clase'>('Alquiler');
+  const [savingQuickBooking, setSavingQuickBooking] = useState(false);
+
   const toggleEstado = (cancha: Cancha) => {
     setCanchaToToggle(cancha);
     setConfirmVisible(true);
@@ -100,6 +113,57 @@ export default function CanchasScreen() {
       Alert.alert('Error', 'No se pudo cambiar el estado de la cancha.');
     } finally {
       setCanchaToToggle(null);
+    }
+  };
+
+  // Quick Reservation Lógica para el Organizador
+  const [refreshKey, setRefreshKey] = useState(0);
+  const [showQuickConfirmModal, setShowQuickConfirmModal] = useState(false);
+
+  const handleSelectSlot = (canchaId: number, fechaStr: string, horaInicio: string, horaFin?: string) => {
+    let finalHoraFin = horaFin;
+    if (!finalHoraFin) {
+      const [h, m] = horaInicio.split(':').map(Number);
+      const endH = (h + 1) % 24;
+      finalHoraFin = `${endH.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`;
+    }
+    setQuickBookingData({
+      canchaId,
+      fecha: fechaStr,
+      horaInicio,
+      horaFin: finalHoraFin,
+    });
+    setShowQuickConfirmModal(true);
+  };
+
+  const handleConfirmQuickBooking = async () => {
+    if (!quickBookingData || !user?.id) return;
+    setSavingQuickBooking(true);
+    try {
+      const { error } = await supabase
+        .from('alquileres_cancha')
+        .insert({
+          cancha_id: quickBookingData.canchaId,
+          usuario_id: user.id,
+          fecha: quickBookingData.fecha,
+          hora_inicio: quickBookingData.horaInicio,
+          hora_fin: quickBookingData.horaFin,
+          monto_total: 0,
+          comision_plataforma: 0,
+          monto_neto_club: 0,
+          estado_pago: 'Aprobado',
+          es_semanal: false,
+        });
+
+      if (error) throw error;
+      Alert.alert('Éxito', 'La cancha ha sido reservada/bloqueada correctamente.');
+      setShowQuickConfirmModal(false);
+      setRefreshKey(prev => prev + 1);
+    } catch (e: any) {
+      console.error(e);
+      Alert.alert('Error', e.message || 'No se pudo reservar el turno.');
+    } finally {
+      setSavingQuickBooking(false);
     }
   };
 
@@ -275,23 +339,23 @@ export default function CanchasScreen() {
         )}
       </View>
 
-      <View style={[styles.mainTabs, { borderBottomColor: theme.border }]}>
+      <View style={styles.tabsWrap}>
         <TouchableOpacity 
-          style={[styles.mainTab, mainTab === 'gestion' && { borderBottomColor: Brand.orange }]}
+          style={[styles.tab, mainTab === 'gestion' ? { backgroundColor: Brand.orange } : { backgroundColor: theme.backgroundElement }]}
           onPress={() => setMainTab('gestion')}
         >
-          <Text style={[styles.mainTabText, { color: mainTab === 'gestion' ? Brand.orange : theme.textSecondary }]}>Gestión</Text>
+          <Text style={[styles.tabText, mainTab === 'gestion' ? { color: '#fff', fontWeight: 'bold' } : { color: theme.textSecondary }]}>Gestión</Text>
         </TouchableOpacity>
         <TouchableOpacity 
-          style={[styles.mainTab, mainTab === 'status' && { borderBottomColor: Brand.orange }]}
+          style={[styles.tab, mainTab === 'status' ? { backgroundColor: Brand.orange } : { backgroundColor: theme.backgroundElement }]}
           onPress={() => setMainTab('status')}
         >
-          <Text style={[styles.mainTabText, { color: mainTab === 'status' ? Brand.orange : theme.textSecondary }]}>Status (Hoy)</Text>
+          <Text style={[styles.tabText, mainTab === 'status' ? { color: '#fff', fontWeight: 'bold' } : { color: theme.textSecondary }]}>Disponibilidad de canchas</Text>
         </TouchableOpacity>
       </View>
 
       {mainTab === 'status' ? (
-        <StatusCanchas />
+        <StatusCanchas key={refreshKey} clubId={user?.club_id} onSelectSlot={handleSelectSlot} />
       ) : (
         <>
 
@@ -338,6 +402,19 @@ export default function CanchasScreen() {
         onCancel={() => {
           setConfirmVisible(false);
           setCanchaToToggle(null);
+        }}
+      />
+
+      <ConfirmModal
+        visible={showQuickConfirmModal}
+        title="Confirmar Reserva"
+        message={`¿Estás seguro de que deseas reservar/bloquear la Cancha ${canchas.find(c => Number(c.id) === quickBookingData?.canchaId)?.numero_cancha} desde las ${quickBookingData?.horaInicio} hasta las ${quickBookingData?.horaFin} hs?`}
+        confirmText="Confirmar"
+        cancelText="Cancelar"
+        onConfirm={handleConfirmQuickBooking}
+        onCancel={() => {
+          setShowQuickConfirmModal(false);
+          setQuickBookingData(null);
         }}
       />
 
@@ -490,9 +567,9 @@ const styles = StyleSheet.create({
   },
   headerTitle: { color: '#fff', fontSize: 28, fontWeight: '800', letterSpacing: -0.5 },
   headerSub: { fontSize: 14, marginTop: 2 },
-  mainTabs: { flexDirection: 'row', borderBottomWidth: 1, marginBottom: Spacing.sm },
-  mainTab: { flex: 1, alignItems: 'center', paddingVertical: Spacing.md, borderBottomWidth: 2, borderBottomColor: 'transparent' },
-  mainTabText: { fontSize: 14, fontWeight: '700' },
+  tabsWrap: { flexDirection: 'row', paddingHorizontal: Spacing.md, marginBottom: Spacing.md, gap: Spacing.sm },
+  tab: { flex: 1, paddingVertical: 10, borderRadius: Radius.full, alignItems: 'center' },
+  tabText: { fontSize: 13, fontWeight: '600' },
 
   modalTabsContainer: {
     paddingBottom: Spacing.sm,

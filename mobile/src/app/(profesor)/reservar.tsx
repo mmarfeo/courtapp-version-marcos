@@ -9,6 +9,7 @@ import { useAuth } from '@/hooks/use-auth';
 import { Brand, Spacing, Radius, Shadow } from '@/constants/theme';
 import CourtUpModal from '@/components/CourtUpModal';
 import { ConfirmModal } from '@/components/confirm-modal';
+import StatusCanchas from '@/components/StatusCanchas';
 
 type Alquiler = {
   id: number;
@@ -27,7 +28,12 @@ export default function ReservarCanchaScreen() {
   const theme = useTheme();
   const { user } = useAuth();
   
-  const [activeTab, setActiveTab] = useState<'mis_reservas' | 'reservar'>('mis_reservas');
+  const [activeTab, setActiveTab] = useState<'mis_reservas' | 'disponibilidad' | 'reservar'>('mis_reservas');
+  const [showGridModal, setShowGridModal] = useState(false);
+
+  // --- Accordion States ---
+  const [fijasExpanded, setFijasExpanded] = useState(true);
+  const [diariasExpanded, setDiariasExpanded] = useState(true);
 
   // --- Estados de Mis Reservas ---
   const [reservas, setReservas] = useState<Alquiler[]>([]);
@@ -77,7 +83,6 @@ export default function ReservarCanchaScreen() {
         .eq('usuario_id', user.id);
         
       if (filterDate) {
-        // Ajustamos la fecha para evitar problemas de zona horaria al filtrar
         const y = filterDate.getFullYear();
         const m = String(filterDate.getMonth() + 1).padStart(2, '0');
         const d = String(filterDate.getDate()).padStart(2, '0');
@@ -125,22 +130,33 @@ export default function ReservarCanchaScreen() {
     });
   };
 
+  const formatDateStr = (dateStr: string) => {
+    if (!dateStr) return '';
+    const parts = dateStr.split('-');
+    if (parts.length === 3) {
+      return `${parts[2]}/${parts[1]}/${parts[0]}`;
+    }
+    return dateStr;
+  };
+
   const renderReserva = ({ item }: { item: Alquiler }) => {
     const clubName = (item.cancha as any)?.organizaciones?.nombre || 'Club';
     return (
-      <View style={[styles.reservaCard, { backgroundColor: theme.card, borderColor: theme.border }, Shadow.sm]}>
+      <View style={[styles.reservaCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
         <View style={styles.cardHeader}>
-          <Text style={[styles.dateText, { color: theme.text }]}>📅 {item.fecha}</Text>
-          <Text style={[styles.statusText, { color: Brand.orange }]}>{item.estado_pago}</Text>
+          <Text style={[styles.dateText, { color: theme.text }]}>
+            📅 {formatDateStr(item.fecha)}  •  ⏰ {item.hora_inicio.slice(0,5)} - {item.hora_fin.slice(0,5)}
+          </Text>
+          <View style={[styles.statusBadge, { backgroundColor: Brand.orange + '15' }]}>
+            <Text style={[styles.statusText, { color: Brand.orange }]}>{item.estado_pago.toUpperCase()}</Text>
+          </View>
         </View>
-        <View style={styles.cardBody}>
-          <Text style={[styles.timeText, { color: theme.text }]}>⏰ {item.hora_inicio.slice(0,5)} a {item.hora_fin.slice(0,5)}</Text>
-          <Text style={[styles.infoText, { color: theme.textSecondary }]}>📍 {clubName} - Cancha {item.cancha?.numero_cancha} ({item.cancha?.deporte})</Text>
-        </View>
-        <View style={styles.cardFooter}>
-          <TouchableOpacity style={[styles.cancelBtn, { borderColor: '#ef4444' }]} onPress={() => handleCancelReserva(item.id)}>
-            <Ionicons name="trash-outline" size={16} color="#ef4444" />
-            <Text style={styles.cancelBtnText}>Eliminar</Text>
+        <View style={styles.cardBodyRow}>
+          <Text style={[styles.infoText, { color: theme.textSecondary }]}>
+            📍 {clubName} - Cancha {item.cancha?.numero_cancha} ({item.cancha?.deporte})
+          </Text>
+          <TouchableOpacity style={styles.deleteIconButton} onPress={() => handleCancelReserva(item.id)}>
+            <Ionicons name="trash-outline" size={18} color={Brand.red} />
           </TouchableOpacity>
         </View>
       </View>
@@ -166,8 +182,29 @@ export default function ReservarCanchaScreen() {
         setClubes(clubsArray);
 
         const canchasIds = canchasData.map(c => c.id);
-        const { data: rentalsData } = await supabase.from('alquileres_cancha').select('cancha_id, hora_inicio, hora_fin, fecha, es_semanal, fecha_fin_recurrencia').in('cancha_id', canchasIds).in('estado_pago', ['Aprobado', 'Pendiente']);
-        setRentals(rentalsData || []);
+        const [
+          { data: rentalsData },
+          { data: clasesData }
+        ] = await Promise.all([
+          supabase.from('alquileres_cancha')
+            .select('cancha_id, hora_inicio, hora_fin, fecha, es_semanal, fecha_fin_recurrencia')
+            .in('cancha_id', canchasIds)
+            .in('estado_pago', ['Aprobado', 'Pendiente']),
+          supabase.from('clases_disponibles')
+            .select('cancha_id, hora_inicio, hora_fin, fecha, es_semanal')
+            .in('cancha_id', canchasIds)
+            .eq('activa', true)
+        ]);
+
+        const combined = [
+          ...(rentalsData || []),
+          ...(clasesData || []).map((c: any) => ({
+            ...c,
+            fecha_fin_recurrencia: null,
+            estado_pago: 'Aprobado'
+          }))
+        ];
+        setRentals(combined);
 
         if (clubsArray.length > 0 && form.organizacion_id === null) {
           const firstClubId = clubsArray[0].id;
@@ -180,10 +217,8 @@ export default function ReservarCanchaScreen() {
   };
 
   useEffect(() => {
-    if (activeTab === 'reservar') {
-      fetchCanchas();
-    }
-  }, [user, activeTab]);
+    fetchCanchas();
+  }, [user]);
 
   const timeToMinutes = (t: string) => {
     if (!t) return 0;
@@ -267,7 +302,7 @@ export default function ReservarCanchaScreen() {
       
       let horasDia = 0;
       let horasNoche = 0;
-      const NIGHT_START = 18; // 18:00 hs empieza tarifa nocturna
+      const NIGHT_START = 18;
 
       if (startDecimal >= NIGHT_START) {
         horasNoche = endDecimal - startDecimal;
@@ -293,7 +328,6 @@ export default function ReservarCanchaScreen() {
         } else if (form.tipo_reserva === 'dias_especificos') {
           shouldInsert = form.dias_semana.includes(currentDate.getDay());
         } else if (form.tipo_reserva === 'fija_semanal') {
-          // Si es fija semanal, verificamos que sea el mismo día de la semana que el día original de la fecha
           const originalDay = new Date(form.fecha + 'T12:00:00').getDay();
           shouldInsert = currentDate.getDay() === originalDay;
           esFijaSemanal = true;
@@ -347,24 +381,57 @@ export default function ReservarCanchaScreen() {
     return d;
   };
 
+  const handleSelectSlot = (canchaId: number, fechaStr: string, horaStr: string, horaFinStr?: string) => {
+    console.log('reservar.tsx: handleSelectSlot invocado!', { canchaId, fechaStr, horaStr, horaFinStr });
+    const parts = fechaStr.split('-').map(Number);
+    const dateObj = new Date(parts[0], parts[1] - 1, parts[2]);
+    
+    let finalHoraFin = horaFinStr;
+    if (!finalHoraFin) {
+      const [h, m] = horaStr.split(':').map(Number);
+      const endH = (h + 1) % 24;
+      finalHoraFin = `${endH.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`;
+    }
+    
+    setForm(prev => ({
+      ...prev,
+      cancha_id: canchaId,
+      fecha: dateObj,
+      hora_inicio: horaStr,
+      hora_fin: finalHoraFin,
+    }));
+    
+    setShowGridModal(false);
+    setActiveTab('reservar');
+  };
+
+  const reservasFijas = reservas.filter(r => r.es_semanal);
+  const reservasDiarias = reservas.filter(r => !r.es_semanal);
+
   return (
     <View style={[styles.container, { backgroundColor: theme.background }]}>
       <View style={[styles.header, { backgroundColor: theme.background }]}>
-        <Text style={styles.headerTitle}>Canchas</Text>
+        <Text style={[styles.headerTitle, { color: theme.text }]}>Canchas</Text>
       </View>
 
       <View style={styles.tabsWrap}>
         <TouchableOpacity 
-          style={[styles.tab, activeTab === 'mis_reservas' && { backgroundColor: Brand.orange }]}
+          style={[styles.tab, activeTab === 'mis_reservas' ? { backgroundColor: Brand.orange } : { backgroundColor: theme.border }]}
           onPress={() => setActiveTab('mis_reservas')}
         >
-          <Text style={[styles.tabText, activeTab === 'mis_reservas' ? { color: '#fff', fontWeight: 'bold' } : { color: theme.textSecondary }]}>Mis Reservas</Text>
+          <Text style={[styles.tabText, { color: activeTab === 'mis_reservas' ? '#fff' : theme.textSecondary }]}>Mis Reservas</Text>
         </TouchableOpacity>
         <TouchableOpacity 
-          style={[styles.tab, activeTab === 'reservar' && { backgroundColor: Brand.orange }]}
+          style={[styles.tab, activeTab === 'disponibilidad' ? { backgroundColor: Brand.orange } : { backgroundColor: theme.border }]}
+          onPress={() => setActiveTab('disponibilidad')}
+        >
+          <Text style={[styles.tabText, { color: activeTab === 'disponibilidad' ? '#fff' : theme.textSecondary, textAlign: 'center' }]}>Disponibilidad{"\n"}de canchas</Text>
+        </TouchableOpacity>
+        <TouchableOpacity 
+          style={[styles.tab, activeTab === 'reservar' ? { backgroundColor: Brand.orange } : { backgroundColor: theme.border }]}
           onPress={() => setActiveTab('reservar')}
         >
-          <Text style={[styles.tabText, activeTab === 'reservar' ? { color: '#fff', fontWeight: 'bold' } : { color: theme.textSecondary }]}>Reservar Cancha</Text>
+          <Text style={[styles.tabText, { color: activeTab === 'reservar' ? '#fff' : theme.textSecondary, textAlign: 'center' }]}>Reservar{"\n"}Cancha</Text>
         </TouchableOpacity>
       </View>
 
@@ -377,11 +444,11 @@ export default function ReservarCanchaScreen() {
               </TouchableOpacity>
             )}
             <TouchableOpacity 
-              style={[styles.dateBtn, { borderColor: theme.border, padding: 8 }]} 
+              style={[styles.dateBtn, { borderColor: theme.border, padding: 8, backgroundColor: theme.card, borderRadius: 8 }]} 
               onPress={() => setShowFilterPicker(true)}
             >
-              <Ionicons name="filter-outline" size={16} color={theme.text} />
-              <Text style={{ color: theme.text }}>{filterDate ? filterDate.toLocaleDateString() : 'Filtrar Fecha'}</Text>
+              <Ionicons name="calendar-outline" size={16} color={theme.textSecondary} />
+              <Text style={{ color: theme.textSecondary, fontWeight: '500' }}>{filterDate ? filterDate.toLocaleDateString() : 'Filtrar Fecha'}</Text>
             </TouchableOpacity>
           </View>
           
@@ -399,19 +466,68 @@ export default function ReservarCanchaScreen() {
           {loadingReservas ? (
             <ActivityIndicator size="large" color={Brand.orange} style={{ marginTop: 40 }} />
           ) : (
-            <FlatList
-              data={reservas}
-              keyExtractor={(item) => item.id.toString()}
-              renderItem={renderReserva}
+            <ScrollView 
               contentContainerStyle={{ padding: Spacing.base, gap: Spacing.md, paddingBottom: 100 }}
               refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); fetchReservas(); }} tintColor={Brand.orange} />}
-              ListEmptyComponent={
-                <View style={{ alignItems: 'center', marginTop: 60 }}>
-                  <Ionicons name="calendar-outline" size={48} color={theme.textMuted} style={{ marginBottom: 16 }} />
-                  <Text style={{ fontSize: 15, color: theme.textSecondary }}>No tienes reservas para mostrar.</Text>
-                </View>
-              }
-            />
+            >
+              {/* Accordion 1: RESERVAS FIJAS */}
+              <View style={[styles.accordionContainer, { borderColor: theme.border, backgroundColor: theme.card }]}>
+                <TouchableOpacity 
+                  style={[styles.accordionHeader, { backgroundColor: theme.card }]} 
+                  onPress={() => setFijasExpanded(!fijasExpanded)}
+                >
+                  <Text style={[styles.accordionTitle, { color: Brand.orange }]}>RESERVAS FIJAS</Text>
+                  <Ionicons name={fijasExpanded ? "chevron-up" : "chevron-down"} size={20} color={Brand.orange} />
+                </TouchableOpacity>
+                {fijasExpanded && (
+                  <View style={styles.accordionContent}>
+                    {reservasFijas.map(item => (
+                      <View key={item.id} style={{ marginBottom: Spacing.sm }}>
+                        {renderReserva({ item })}
+                      </View>
+                    ))}
+                    {reservasFijas.length === 0 && (
+                      <Text style={[styles.emptyText, { color: theme.textMuted }]}>No hay reservas fijas registradas.</Text>
+                    )}
+                  </View>
+                )}
+              </View>
+
+              {/* Accordion 2: RESERVAS DIARIAS */}
+              <View style={[styles.accordionContainer, { borderColor: theme.border, backgroundColor: theme.card }]}>
+                <TouchableOpacity 
+                  style={[styles.accordionHeader, { backgroundColor: theme.card }]} 
+                  onPress={() => setDiariasExpanded(!diariasExpanded)}
+                >
+                  <Text style={[styles.accordionTitle, { color: Brand.orange }]}>RESERVAS DIARIAS</Text>
+                  <Ionicons name={diariasExpanded ? "chevron-up" : "chevron-down"} size={20} color={Brand.orange} />
+                </TouchableOpacity>
+                {diariasExpanded && (
+                  <View style={styles.accordionContent}>
+                    {reservasDiarias.map(item => (
+                      <View key={item.id} style={{ marginBottom: Spacing.sm }}>
+                        {renderReserva({ item })}
+                      </View>
+                    ))}
+                    {reservasDiarias.length === 0 && (
+                      <Text style={[styles.emptyText, { color: theme.textMuted }]}>No hay reservas diarias registradas.</Text>
+                    )}
+                  </View>
+                )}
+              </View>
+            </ScrollView>
+          )}
+        </View>
+      )}
+
+      {activeTab === 'disponibilidad' && (
+        <View style={{ flex: 1, paddingVertical: Spacing.sm }}>
+          {form.organizacion_id ? (
+            <StatusCanchas clubId={form.organizacion_id} onSelectSlot={handleSelectSlot} />
+          ) : (
+            <Text style={{ textAlign: 'center', color: theme.textSecondary, marginTop: 40 }}>
+              Por favor, selecciona un club primero.
+            </Text>
           )}
         </View>
       )}
@@ -420,6 +536,16 @@ export default function ReservarCanchaScreen() {
         <ScrollView contentContainerStyle={styles.content}>
           {loadingCanchas ? <ActivityIndicator color={Brand.orange} /> : (
             <>
+              {clubes.length > 0 && (
+                <TouchableOpacity 
+                  style={[styles.viewGridBtn, { borderColor: Brand.orange, backgroundColor: theme.card }]} 
+                  onPress={() => setShowGridModal(true)}
+                >
+                  <Ionicons name="calendar-outline" size={16} color={Brand.orange} />
+                  <Text style={[styles.viewGridBtnText, { color: Brand.orange, fontWeight: 'bold' }]}>Ver Grilla de Disponibilidad</Text>
+                </TouchableOpacity>
+              )}
+
               {clubes.length > 0 && (
                 <View style={[styles.section, { backgroundColor: theme.card }]}>
                   <Text style={[styles.label, { color: theme.textSecondary }]}>Sede / Club</Text>
@@ -601,6 +727,23 @@ export default function ReservarCanchaScreen() {
         onConfirm={confirmConfig.onConfirm}
         onCancel={() => setConfirmConfig(prev => ({ ...prev, visible: false }))}
       />
+
+      <CourtUpModal
+        visible={showGridModal}
+        title="Disponibilidad de Canchas"
+        onClose={() => setShowGridModal(false)}
+        height={650}
+      >
+        <View style={{ flex: 1, paddingVertical: Spacing.sm }}>
+          {form.organizacion_id ? (
+            <StatusCanchas clubId={form.organizacion_id} onSelectSlot={handleSelectSlot} />
+          ) : (
+            <Text style={{ textAlign: 'center', color: theme.textSecondary, marginTop: 40 }}>
+              Por favor, selecciona un club primero.
+            </Text>
+          )}
+        </View>
+      </CourtUpModal>
     </View>
   );
 }
@@ -609,9 +752,9 @@ const styles = StyleSheet.create({
   container: { flex: 1 },
   header: { flexDirection: 'row', alignItems: 'center', paddingTop: Spacing.xxxl + Spacing.xl, paddingBottom: Spacing.sm, paddingHorizontal: Spacing.xl },
   headerTitle: { color: '#fff', fontSize: 28, fontWeight: '800' },
-  tabsWrap: { flexDirection: 'row', paddingHorizontal: Spacing.base, marginBottom: Spacing.md, gap: Spacing.sm },
-  tab: { flex: 1, paddingVertical: 10, borderRadius: Radius.full, alignItems: 'center', backgroundColor: '#333' },
-  tabText: { fontSize: 13, fontWeight: '600' },
+  tabsWrap: { flexDirection: 'row', paddingHorizontal: Spacing.base, marginBottom: Spacing.md, gap: 8 },
+  tab: { flex: 1, paddingVertical: 10, borderRadius: Radius.full, alignItems: 'center', justifyContent: 'center' },
+  tabText: { fontSize: 12, fontWeight: '700', color: '#fff' },
   content: { padding: Spacing.base, gap: Spacing.md, paddingBottom: 100 },
   section: { padding: Spacing.base, borderRadius: Radius.lg },
   label: { fontSize: 13, fontWeight: '600', marginBottom: Spacing.sm },
@@ -625,14 +768,30 @@ const styles = StyleSheet.create({
   row: { flexDirection: 'row' },
   saveBtn: { backgroundColor: Brand.orange, padding: 16, borderRadius: Radius.md, alignItems: 'center', marginTop: 16 },
   saveBtnText: { color: '#fff', fontWeight: 'bold', fontSize: 16 },
-  reservaCard: { borderRadius: Radius.lg, borderWidth: 1, padding: Spacing.base },
+  reservaCard: { borderRadius: Radius.lg, borderWidth: 1, padding: Spacing.base, marginVertical: 4 },
   cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: Spacing.sm },
-  dateText: { fontSize: 16, fontWeight: '700' },
-  statusText: { fontSize: 13, fontWeight: '700' },
-  cardBody: { gap: 4, marginBottom: Spacing.md },
-  timeText: { fontSize: 15, fontWeight: '600' },
-  infoText: { fontSize: 14 },
-  cardFooter: { flexDirection: 'row', justifyContent: 'flex-end', borderTopWidth: 1, borderTopColor: '#333', paddingTop: Spacing.sm },
-  cancelBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 12, paddingVertical: 6, borderRadius: Radius.full, borderWidth: 1 },
-  cancelBtnText: { color: '#ef4444', fontSize: 13, fontWeight: '600' },
+  dateText: { fontSize: 14, fontWeight: '700' },
+  statusBadge: { backgroundColor: '#fef3c7', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 4 },
+  statusText: { fontSize: 11, fontWeight: '700', color: '#d97706' },
+  cardBodyRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: Spacing.xs },
+  infoText: { fontSize: 13, flex: 1, marginRight: 8 },
+  deleteIconButton: { padding: 4 },
+  accordionContainer: { borderWidth: 1, borderRadius: Radius.lg, overflow: 'hidden', marginBottom: Spacing.md },
+  accordionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: Spacing.md },
+  accordionTitle: { fontSize: 14, fontWeight: '800', color: '#9a3412' },
+  accordionContent: { paddingHorizontal: Spacing.md, paddingBottom: Spacing.md },
+  emptyText: { fontSize: 13, color: '#9ca3af', textAlign: 'center', paddingVertical: Spacing.xs },
+  viewGridBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    padding: 12,
+    borderWidth: 1.5,
+    borderRadius: Radius.md,
+    borderStyle: 'dashed',
+  },
+  viewGridBtnText: {
+    fontSize: 14,
+  },
 });

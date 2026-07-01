@@ -5,6 +5,7 @@ import { useTheme } from '@/hooks/use-theme';
 import { useAuth } from '@/hooks/use-auth';
 import { Brand, Spacing, Radius, Shadow } from '@/constants/theme';
 import { Ionicons } from '@expo/vector-icons';
+import { useRouter } from 'expo-router';
 import CourtUpModal from '@/components/CourtUpModal';
 
 interface Debtor {
@@ -17,6 +18,7 @@ interface Debtor {
 export default function DashboardScreen() {
   const theme = useTheme();
   const { user } = useAuth();
+  const router = useRouter();
   
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -299,7 +301,8 @@ export default function DashboardScreen() {
               stats.totalCanchas, 
               'grid-outline', 
               '#a855f7', 
-              'Canchas registradas'
+              'Ver disponibilidad y gestión',
+              () => router.push('/(organizador)/canchas' as any)
             )}
 
             {renderCard(

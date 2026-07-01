@@ -9,9 +9,12 @@ import {
   RefreshControl,
   Alert,
   TextInput,
+  ScrollView,
+  useColorScheme,
+  StatusBar,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { useLocalSearchParams } from 'expo-router';
+import { useLocalSearchParams, router } from 'expo-router';
 import { supabase } from '@/lib/supabase';
 import { useTheme } from '@/hooks/use-theme';
 import { useAuth } from '@/hooks/use-auth';
@@ -53,6 +56,7 @@ type ClaseDisponible = {
 
 export default function ClasesJugadorScreen() {
   const theme = useTheme();
+  const scheme = useColorScheme();
   const { user } = useAuth();
   const { sendNotificationToUser } = useNotifications();
   const [clases, setClases] = useState<ClaseDisponible[]>([]);
@@ -347,11 +351,18 @@ export default function ClasesJugadorScreen() {
     );
   };
 
+  const isDark = scheme === 'dark';
+
   return (
     <View style={[styles.container, { backgroundColor: theme.background }]}>
-      <View style={[styles.header, { backgroundColor: '#0a0a0a' }]}>
-        <Text style={styles.headerTitle}>Clases Disponibles</Text>
+      <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} backgroundColor={theme.background} />
+
+      {/* Header */}
+      <View style={[styles.header, { backgroundColor: theme.background, borderBottomWidth: 1, borderBottomColor: theme.border }]}>
+        <Text style={[styles.headerTitle, { color: theme.text }]}>Clases Disponibles</Text>
       </View>
+
+
 
       {/* Search Input Area */}
       <View style={[styles.filtersSection, { backgroundColor: theme.card, borderBottomColor: theme.border }]}>
@@ -447,6 +458,30 @@ export default function ClasesJugadorScreen() {
         }}
         onCancel={() => setConfirmConfig(prev => ({...prev, visible: false}))}
       />
+      {/* Floating Chat Bubble */}
+      <TouchableOpacity
+        style={{
+          position: 'absolute',
+          bottom: 20,
+          right: 20,
+          width: 56,
+          height: 56,
+          borderRadius: 28,
+          backgroundColor: Brand.orange,
+          justifyContent: 'center',
+          alignItems: 'center',
+          elevation: 5,
+          shadowColor: '#000',
+          shadowOffset: { width: 0, height: 2 },
+          shadowOpacity: 0.25,
+          shadowRadius: 3.84,
+          zIndex: 9999,
+        }}
+        onPress={() => router.push('/(jugador)/chat')}
+        activeOpacity={0.8}
+      >
+        <Ionicons name="chatbubbles" size={24} color="#fff" />
+      </TouchableOpacity>
     </View>
   );
 }

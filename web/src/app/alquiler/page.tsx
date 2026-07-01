@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useRouter } from 'next/navigation';
-import { MapPin, Calendar, Clock, Loader2, ArrowLeft, Grid3X3, Search, Filter } from 'lucide-react';
+import { MapPin, Calendar, Clock, Loader2, ArrowLeft, Grid3X3, Search, Filter, X, AlertCircle } from 'lucide-react';
 import Link from 'next/link';
 
 interface Cancha {
@@ -64,11 +64,14 @@ export default function AlquilerPage() {
   // Search & Filter
   const [search, setSearch] = useState('');
   const [selectedSport, setSelectedSport] = useState<string>('');
+  const [selectedClub, setSelectedClub] = useState<string>('');
 
   // Date/Time Selection
   const [dates, setDates] = useState<{ label: string; dateStr: string; dayName: string }[]>([]);
   const [selectedDateIndex, setSelectedDateIndex] = useState(0);
   const [selectedDuration, setSelectedDuration] = useState(90);
+  const [selectedCancha, setSelectedCancha] = useState<Cancha | null>(null);
+  const [selectedStartTime, setSelectedStartTime] = useState<string | null>(null);
 
   // Modals / Actions
   const [bookingCanchaId, setBookingCanchaId] = useState<number | null>(null);
@@ -81,24 +84,90 @@ export default function AlquilerPage() {
     return h * 60 + m;
   };
 
+  const isCellSelected = (canchaId: number, hourStr: string) => {
+    if (!selectedCancha || selectedCancha.id !== canchaId || !selectedStartTime) return false;
+    const startMins = timeToMinutes(selectedStartTime);
+    const endMins = startMins + selectedDuration;
+    const cellMins = timeToMinutes(hourStr);
+    return cellMins >= startMins && cellMins < endMins;
+  };
+
+  const getCellSelectionStatus = (canchaId: number, hourStr: string) => {
+    if (!selectedCancha || selectedCancha.id !== canchaId || !selectedStartTime) return null;
+    const startMins = timeToMinutes(selectedStartTime);
+    const endMins = startMins + selectedDuration;
+    const cellMins = timeToMinutes(hourStr);
+    
+    if (cellMins < startMins || cellMins >= endMins) return null;
+    
+    if (hourStr === selectedStartTime) {
+      return {
+        isStart: true,
+        label: 'INICIO',
+        timeRange: `${selectedStartTime.substring(0, 5)} - ${minutesToTime(endMins)}`,
+      };
+    } else {
+      const remainingMins = endMins - cellMins;
+      return {
+        isStart: false,
+        label: `+${remainingMins} min`,
+        timeRange: `hasta ${minutesToTime(endMins)}`,
+      };
+    }
+  };
+
+  const checkSlotAvailabilityForDuration = (canchaId: number, hourStr: string) => {
+    const startMins = timeToMinutes(hourStr);
+    const endMins = startMins + selectedDuration;
+    const activeDateStr = dates[selectedDateIndex]?.dateStr;
+    if (!activeDateStr) return false;
+    return !isTimeSlotRented(canchaId, startMins, endMins, activeDateStr);
+  };
+
+  const getEventForCell = (canchaId: number, hourStr: string) => {
+    const cellDec = timeToMinutes(hourStr) / 60;
+    const activeDateStr = dates[selectedDateIndex]?.dateStr;
+    if (!activeDateStr) return null;
+    const activeDay = getWeekdayUTC(activeDateStr);
+    
+    return rentals.find(rental => {
+      if (rental.cancha_id !== canchaId) return false;
+      let matchesDate = false;
+      if (rental.es_semanal) {
+        const rentalDay = getWeekdayUTC(rental.fecha);
+        const withinRecurrence = (
+          activeDateStr >= rental.fecha &&
+          (!rental.fecha_fin_recurrencia || activeDateStr <= rental.fecha_fin_recurrencia)
+        );
+        matchesDate = (activeDay === rentalDay && withinRecurrence);
+      } else {
+        matchesDate = (rental.fecha === activeDateStr);
+      }
+      if (!matchesDate) return false;
+      const rStart = timeToMinutes(rental.hora_inicio) / 60;
+      const rEnd = timeToMinutes(rental.hora_fin) / 60;
+      return (cellDec >= rStart && cellDec < rEnd);
+    });
+  };
+
   const minutesToTime = (m: number) => {
     const h = Math.floor(m / 60);
     const mins = m % 60;
     return `${String(h).padStart(2, '0')}:${String(mins).padStart(2, '0')}:00`;
   };
 
-  const calculatePriceForTime = (cancha: Cancha, startTime: string) => {
+  const calculatePriceForTime = (cancha: Cancha, startTime: string, duration: number = selectedDuration) => {
     const startMins = timeToMinutes(startTime);
-    const endMins = startMins + selectedDuration;
+    const endMins = startMins + duration;
     const nightStartMins = timeToMinutes(cancha.hora_inicio_noche);
 
     let dayMins = 0;
     let nightMins = 0;
 
     if (endMins <= nightStartMins) {
-      dayMins = selectedDuration;
+      dayMins = duration;
     } else if (startMins >= nightStartMins) {
-      nightMins = selectedDuration;
+      nightMins = duration;
     } else {
       dayMins = nightStartMins - startMins;
       nightMins = endMins - nightStartMins;
@@ -149,23 +218,45 @@ export default function AlquilerPage() {
       
       const { data: canchasData, error: canchasError } = await supabase
         .from('canchas')
-        .select('*, organizacion:organizaciones(nombre)')
+        .select('*, organizaciones(nombre)')
         .eq('activa', true);
 
       if (canchasError) throw canchasError;
 
-      const { data: rentalsData, error: rentalsError } = await supabase
-        .from('alquileres_cancha')
-        .select('cancha_id, hora_inicio, hora_fin, fecha, es_semanal, fecha_fin_recurrencia')
-        .or(`fecha.eq.${activeDate},es_semanal.eq.true`)
-        .in('estado_pago', ['Aprobado', 'Pendiente']);
+      const [
+        { data: rentalsData, error: rentalsError },
+        { data: clasesData, error: clasesError }
+      ] = await Promise.all([
+        supabase
+          .from('alquileres_cancha')
+          .select('cancha_id, hora_inicio, hora_fin, fecha, es_semanal, fecha_fin_recurrencia')
+          .or(`fecha.eq.${activeDate},es_semanal.eq.true`)
+          .in('estado_pago', ['Aprobado', 'Pendiente']),
+        supabase
+          .from('clases_disponibles')
+          .select('cancha_id, hora_inicio, hora_fin, fecha')
+          .eq('fecha', activeDate)
+          .eq('activa', true)
+      ]);
 
       if (rentalsError) throw rentalsError;
+      if (clasesError) throw clasesError;
+
+      const combined = [
+        ...(rentalsData || []),
+        ...(clasesData || []).map((c: any) => ({
+          ...c,
+          es_semanal: false,
+          fecha_fin_recurrencia: null,
+          estado_pago: 'Aprobado'
+        }))
+      ];
 
       setCanchas(canchasData || []);
-      setRentals(rentalsData || []);
-    } catch (e) {
+      setRentals(combined);
+    } catch (e: any) {
       console.error('Error fetching courts/rentals:', e);
+      setError(e.message || 'Error al obtener la disponibilidad de las canchas.');
     } finally {
       setLoading(false);
     }
@@ -174,6 +265,11 @@ export default function AlquilerPage() {
   useEffect(() => {
     fetchData();
   }, [fetchData]);
+
+  useEffect(() => {
+    setSelectedCancha(null);
+    setSelectedStartTime(null);
+  }, [selectedDateIndex, selectedDuration, selectedClub]);
 
   const isTimeSlotRented = (canchaId: number, startMins: number, endMins: number, activeDateStr: string) => {
     const activeDay = getWeekdayUTC(activeDateStr);
@@ -197,47 +293,6 @@ export default function AlquilerPage() {
     });
   };
 
-  const groupedCanchas = useMemo(() => {
-    const activeDateStr = dates[selectedDateIndex]?.dateStr;
-    if (!activeDateStr) return [];
-
-    const filtered = canchas.filter((cancha) => {
-      const clubName = cancha.organizacion?.nombre || cancha.nombre_club || '';
-      const matchesSearch =
-        clubName.toLowerCase().includes(search.toLowerCase()) ||
-        cancha.superficie?.toLowerCase().includes(search.toLowerCase());
-
-      if (!matchesSearch) return false;
-      if (selectedSport && cancha.deporte.toLowerCase() !== selectedSport.toLowerCase()) return false;
-      return true;
-    });
-
-    const groups: { [key: string]: { clubName: string; canchas: any[] } } = {};
-    
-    filtered.forEach(cancha => {
-      const clubName = cancha.organizacion?.nombre || cancha.nombre_club || 'Sin Club';
-      if (!groups[clubName]) {
-        groups[clubName] = { clubName, canchas: [] };
-      }
-      
-      const availableSlots = START_TIMES.filter(time => {
-        const startMins = timeToMinutes(time);
-        const endMins = startMins + selectedDuration;
-        return !isTimeSlotRented(cancha.id, startMins, endMins, activeDateStr);
-      });
-
-      if (availableSlots.length > 0) {
-        groups[clubName].canchas.push({ ...cancha, availableSlots });
-      }
-    });
-
-    const result = Object.values(groups).filter(g => g.canchas.length > 0);
-    result.forEach(g => {
-      g.canchas.sort((a, b) => a.numero_cancha - b.numero_cancha);
-    });
-    return result;
-  }, [canchas, search, selectedSport, selectedDuration, dates, selectedDateIndex, rentals]);
-
   const handleReservarYPagar = async (cancha: Cancha, startTime: string) => {
     setError(null);
 
@@ -253,9 +308,15 @@ export default function AlquilerPage() {
     const horaInicio = minutesToTime(startTimeMins);
 
     try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+
       const res = await fetch('/api/pagos/alquiler', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
         body: JSON.stringify({
           cancha_id: cancha.id,
           fecha: activeDate.dateStr,
@@ -285,6 +346,44 @@ export default function AlquilerPage() {
     }
   };
 
+  const handleSlotClick = (cancha: Cancha, hourTime: string) => {
+    if (selectedCancha?.id === cancha.id && selectedStartTime === hourTime) {
+      setSelectedCancha(null);
+      setSelectedStartTime(null);
+    } else {
+      setSelectedCancha(cancha);
+      setSelectedStartTime(hourTime);
+    }
+  };
+
+  const allFilteredCanchas = useMemo(() => {
+    return canchas.filter((cancha) => {
+      const clubName = cancha.organizaciones?.nombre || cancha.nombre_club || '';
+      const matchesSearch =
+        clubName.toLowerCase().includes(search.toLowerCase()) ||
+        (cancha.superficie || '').toLowerCase().includes(search.toLowerCase());
+
+      if (!matchesSearch) return false;
+      if (selectedSport && cancha.deporte.toLowerCase() !== selectedSport.toLowerCase()) return false;
+      if (selectedClub && clubName !== selectedClub) return false;
+      return true;
+    }).sort((a, b) => {
+      const clubA = a.organizaciones?.nombre || a.nombre_club || '';
+      const clubB = b.organizaciones?.nombre || b.nombre_club || '';
+      if (clubA !== clubB) return clubA.localeCompare(clubB);
+      return a.numero_cancha - b.numero_cancha;
+    });
+  }, [canchas, search, selectedSport, selectedClub]);
+
+  const uniqueClubs = useMemo(() => {
+    const clubs = new Set<string>();
+    canchas.forEach(c => {
+      const name = c.organizaciones?.nombre || c.nombre_club;
+      if (name) clubs.add(name);
+    });
+    return Array.from(clubs).sort();
+  }, [canchas]);
+
   return (
     <div className="min-h-screen bg-background text-foreground p-6 md:p-10 font-sans relative overflow-hidden transition-colors duration-300 animate-fade-in">
       <div className="absolute top-1/4 -left-24 w-96 h-96 bg-primary/10 rounded-full blur-[120px] pointer-events-none"></div>
@@ -308,8 +407,31 @@ export default function AlquilerPage() {
         </div>
 
         {error && (
-          <div className="mb-6 p-4 rounded-xl bg-red-500/10 border border-red-500/30 text-red-500 dark:text-red-400 text-sm flex items-start gap-3 animate-shake">
-            <span>{error}</span>
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
+            <div className="bg-surface border border-border rounded-2xl max-w-md w-full p-6 shadow-2xl relative animate-scale-up">
+              <button 
+                onClick={() => setError(null)}
+                className="absolute top-4 right-4 text-stone-400 hover:text-foreground p-1 rounded-lg hover:bg-surface-secondary transition-colors"
+              >
+                <X size={18} />
+              </button>
+              
+              <div className="flex flex-col items-center text-center py-2">
+                <div className="w-12 h-12 bg-red-500/10 text-red-500 rounded-full flex items-center justify-center mb-4">
+                  <AlertCircle size={28} />
+                </div>
+                <h3 className="text-lg font-bold text-foreground">Error de Reserva</h3>
+                <p className="text-stone-500 dark:text-stone-400 text-sm mt-2 leading-relaxed">
+                  {error}
+                </p>
+                <button
+                  onClick={() => setError(null)}
+                  className="mt-6 w-full bg-primary hover:bg-primary-hover text-white font-bold py-3 rounded-xl shadow-md transition-colors"
+                >
+                  Entendido
+                </button>
+              </div>
+            </div>
           </div>
         )}
 
@@ -406,6 +528,20 @@ export default function AlquilerPage() {
               <option value="Padel">Pádel</option>
             </select>
           </div>
+
+          <div className="w-full sm:w-60 relative">
+            <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-400" size={18} />
+            <select
+              value={selectedClub}
+              onChange={(e) => setSelectedClub(e.target.value)}
+              className="w-full bg-surface border border-border rounded-xl pl-10 pr-4 py-3 text-sm focus:outline-none focus:border-primary transition-colors appearance-none text-foreground"
+            >
+              <option value="">Todos los clubes</option>
+              {uniqueClubs.map(club => (
+                <option key={club} value={club}>{club}</option>
+              ))}
+            </select>
+          </div>
         </div>
 
         {loading ? (
@@ -413,79 +549,157 @@ export default function AlquilerPage() {
             <Loader2 className="animate-spin text-primary" size={40} />
             <p className="text-stone-500 text-sm">Buscando disponibilidad...</p>
           </div>
-        ) : groupedCanchas.length === 0 ? (
+        ) : allFilteredCanchas.length === 0 ? (
           <div className="text-center py-20 bg-surface border border-border rounded-2xl animate-fade-in">
             <Calendar size={48} className="mx-auto text-stone-300 dark:text-stone-700 mb-4" />
             <p className="text-stone-500 text-lg">No hay canchas disponibles para los filtros seleccionados.</p>
           </div>
         ) : (
-          <div className="space-y-6">
-            {groupedCanchas.map((group, gIdx) => (
-              <div key={group.clubName} className="animate-slide-up" style={{ animationDelay: `${gIdx * 50}ms` }}>
-                <h2 className="text-xl font-bold mb-4 ml-1 flex items-center gap-2">
-                  🏢 {group.clubName}
-                </h2>
-                
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                  {group.canchas.map((cancha) => (
-                    <div 
-                      key={cancha.id} 
-                      className="bg-surface border border-border rounded-2xl p-6 flex flex-col hover:border-primary/30 transition-all duration-300 shadow-sm hover:shadow-md"
-                    >
-                      <div className="flex justify-between items-start mb-4">
-                        <div>
-                          <h3 className="text-lg font-bold text-foreground">
-                            Cancha {cancha.numero_cancha}
-                          </h3>
-                          <p className="flex items-center gap-2 text-xs text-stone-500 mt-1">
-                            <MapPin size={12} className="text-stone-400" />
-                            Superficie: {cancha.superficie || 'Standard'}
-                          </p>
-                        </div>
-                        <span className={`text-[10px] font-bold px-2 py-1 rounded-md uppercase tracking-wider ${
-                          cancha.deporte === 'Tenis' 
-                            ? 'bg-primary/10 text-primary border border-primary/20' 
-                            : 'bg-accent/15 text-stone-700 dark:text-accent border border-accent/30'
-                        }`}>
-                          {cancha.deporte === 'Padel' ? 'Pádel' : cancha.deporte}
-                        </span>
-                      </div>
-
-                      <div className="mt-2 border-t border-border pt-4">
-                        <p className="text-[10px] text-stone-400 uppercase font-bold tracking-wider mb-3">Horarios Disponibles</p>
-                        <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
-                          {cancha.availableSlots.map((time: string) => {
-                            const price = calculatePriceForTime(cancha, time);
-                            return (
-                              <button
-                                key={time}
-                                onClick={() => handleReservarYPagar(cancha, time)}
-                                disabled={bookingCanchaId === cancha.id}
-                                className="min-w-[70px] bg-surface-secondary hover:bg-primary/10 border border-border hover:border-primary/30 rounded-xl p-2 flex flex-col items-center justify-center transition-all group shrink-0"
-                              >
-                                <span className="text-sm font-bold text-foreground group-hover:text-primary transition-colors">
-                                  {time.substring(0, 5)}
-                                </span>
-                                <span className="text-[10px] font-bold text-primary mt-1">
-                                  ${price.toLocaleString('es-AR')}
-                                </span>
-                              </button>
-                            );
-                          })}
-                        </div>
-                      </div>
-                      
-                      {bookingCanchaId === cancha.id && (
-                        <div className="mt-4 flex items-center justify-center gap-2 text-sm font-bold text-primary bg-primary/10 py-2 rounded-xl border border-primary/20">
-                          <Loader2 className="animate-spin" size={16} />
-                          Procesando reserva...
-                        </div>
-                      )}
-                    </div>
-                  ))}
+          <div className="bg-surface border border-border rounded-2xl p-6 mb-6 animate-fade-in space-y-6">
+            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 border-b border-border pb-4">
+              <div>
+                <h2 className="text-lg font-bold text-foreground">Status de Disponibilidad</h2>
+                <p className="text-xs text-stone-500 mt-1">Selecciona una hora disponible para la duración de {selectedDuration} minutos.</p>
+              </div>
+              <div className="flex flex-wrap items-center gap-4 text-[10px] text-stone-400">
+                <div className="flex items-center gap-1.5">
+                  <span className="w-3 h-3 rounded bg-amber-500/10 border border-amber-500/20 inline-block" />
+                  <span>Ocupado / Reservado</span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <span className="w-3 h-3 rounded bg-emerald-500/[0.04] border border-dashed border-emerald-500/30 inline-block" />
+                  <span>Disponible ({selectedDuration} min)</span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <span className="w-3 h-3 rounded bg-stone-500/[0.04] border border-stone-500/20 inline-block" />
+                  <span>Duración Insuficiente</span>
                 </div>
               </div>
-            ))}
+            </div>
+
+            <div className="overflow-x-auto border border-border rounded-xl bg-surface-secondary/15 max-h-[500px] overflow-y-auto">
+              <table className="border-collapse w-full text-left" style={{ minWidth: `${100 + allFilteredCanchas.length * 160}px` }}>
+                <thead className="sticky top-0 bg-surface-secondary z-10">
+                  <tr className="border-b border-border">
+                    <th className="w-24 p-3 text-xs font-bold text-stone-400 border-r border-border text-center bg-surface-secondary">
+                      Hora
+                    </th>
+                    {allFilteredCanchas.map(c => (
+                      <th key={c.id} className="p-3 text-center border-r border-border/60 last:border-r-0 bg-surface-secondary">
+                        <div className="text-[10px] text-primary font-bold truncate max-w-[155px] mx-auto">{c.organizaciones?.nombre || c.nombre_club}</div>
+                        <div className="text-sm font-extrabold text-foreground mt-0.5">Cancha {c.numero_cancha}</div>
+                        <div className="text-[9px] text-stone-500 font-bold uppercase tracking-wider">{c.deporte} · {c.superficie}</div>
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {['08:00', '09:00', '10:00', '11:00', '12:00', '13:00', '14:00', '15:00', '16:00', '17:00', '18:00', '19:00', '20:00', '21:00', '22:00'].map(hourStr => {
+                    const hourTime = `${hourStr}:00`;
+                    return (
+                      <tr key={hourStr} className="border-b border-border/40 hover:bg-surface-secondary/20 transition-colors">
+                        <td className="p-0 border-r border-border/40 text-center">
+                          <div className="h-12 flex items-center justify-center text-xs font-semibold text-stone-400 font-mono">
+                            {hourStr} hs
+                          </div>
+                        </td>
+                        {allFilteredCanchas.map(cancha => {
+                          const event = getEventForCell(cancha.id, hourTime);
+                          
+                          if (event) {
+                            return (
+                              <td key={cancha.id} className="p-1 border-r border-border/40 last:border-r-0">
+                                <div className="h-10 flex flex-col items-center justify-center rounded-lg bg-amber-500/10 border border-amber-500/20 text-stone-500 font-bold text-[10px] uppercase cursor-not-allowed">
+                                  Ocupado
+                                </div>
+                              </td>
+                            );
+                          }
+                          const price = calculatePriceForTime(cancha, hourTime, 60);
+                          const isSelected = isCellSelected(cancha.id, hourTime);
+                          
+                          if (isSelected) {
+                            return (
+                              <td key={cancha.id} className="p-1 border-r border-border/40 last:border-r-0">
+                                <button
+                                  type="button"
+                                  onClick={() => handleSlotClick(cancha, selectedStartTime!)}
+                                  className="w-full h-10 rounded-lg flex flex-col items-center justify-center bg-gradient-to-r from-primary to-orange-600 border border-primary text-white font-black shadow-md shadow-primary/20 transition-all duration-200"
+                                >
+                                  <span className="text-[9px] font-extrabold uppercase">Seleccionado</span>
+                                  <span className="text-[10px] mt-0.5">${price.toLocaleString('es-AR')}</span>
+                                </button>
+                              </td>
+                            );
+                          }
+                          
+                          const isAvailableForDuration = checkSlotAvailabilityForDuration(cancha.id, hourTime);
+                          
+                          return (
+                            <td key={cancha.id} className="p-1 border-r border-border/40 last:border-r-0">
+                              {isAvailableForDuration ? (
+                                <button
+                                  type="button"
+                                  onClick={() => handleSlotClick(cancha, hourTime)}
+                                  className="w-full h-10 rounded-lg flex flex-col items-center justify-center border border-dashed border-emerald-500/20 bg-emerald-500/[0.03] hover:bg-primary/10 hover:border-primary/40 text-emerald-500 hover:text-primary transition-all duration-200"
+                                >
+                                  <span className="text-[9px] font-extrabold uppercase">Reservar</span>
+                                  <span className="text-[10px] font-black mt-0.5">${price.toLocaleString('es-AR')}</span>
+                                </button>
+                              ) : (
+                                <div className="w-full h-10 rounded-lg flex items-center justify-center bg-stone-500/[0.04] border border-stone-500/15 text-stone-500 text-[8px] font-bold text-center leading-tight">
+                                  Sin espacio<br />para {selectedDuration}m
+                                </div>
+                              )}
+                            </td>
+                          );
+                        })}
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+
+            {selectedCancha && selectedStartTime && (
+              <div className="bg-surface-secondary border border-primary/30 p-5 rounded-xl flex flex-col sm:flex-row justify-between items-center gap-4 animate-slide-up shadow-lg">
+                <div className="flex items-center gap-3">
+                  <div className="p-3 bg-primary/10 text-primary rounded-xl">
+                    <Calendar size={20} />
+                  </div>
+                  <div>
+                    <h4 className="text-sm font-bold text-foreground">Reserva Seleccionada</h4>
+                    <p className="text-xs text-stone-500 dark:text-stone-400 mt-0.5">
+                      Cancha {selectedCancha.numero_cancha} ({selectedCancha.deporte}) en <strong className="text-primary">{selectedCancha.organizaciones?.nombre || selectedCancha.nombre_club}</strong>
+                    </p>
+                    <p className="text-xs text-primary font-bold mt-0.5">
+                      {dates[selectedDateIndex]?.label} · {selectedStartTime.substring(0, 5)} hs ({selectedDuration} min)
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-4 w-full sm:w-auto justify-end">
+                  <div className="text-right hidden sm:block">
+                    <span className="text-[10px] text-stone-400 uppercase font-bold tracking-wider block">Total a Pagar</span>
+                    <span className="text-lg font-black text-primary">${calculatePriceForTime(selectedCancha, selectedStartTime).toLocaleString('es-AR')}</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => handleReservarYPagar(selectedCancha, selectedStartTime)}
+                    disabled={bookingCanchaId === selectedCancha.id}
+                    className="w-full sm:w-auto bg-primary hover:bg-primary-hover text-white font-bold px-6 py-3 rounded-xl shadow-md transition-colors flex items-center justify-center gap-2"
+                  >
+                    {bookingCanchaId === selectedCancha.id ? (
+                      <>
+                        <Loader2 className="animate-spin" size={16} />
+                        Procesando...
+                      </>
+                    ) : (
+                      'Alquilar y Pagar'
+                    )}
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         )}
       </div>

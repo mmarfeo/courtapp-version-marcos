@@ -11,6 +11,7 @@ const DAYS_ES = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'
 const HOURS = Array.from({ length: 17 }, (_, i) => `${(i + 7).toString().padStart(2, '0')}:00`);
 
 export default function GestionCanchasPage() {
+  const [debugInfo, setDebugInfo] = useState<string>('');
   const [showModal, setShowModal] = useState(false);
   const [canchas, setCanchas] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -126,16 +127,32 @@ export default function GestionCanchasPage() {
         const canchasIds = list.map(c => c.id);
         const { data: clases } = await supabase
           .from('clases_disponibles')
-          .select('id, fecha, hora_inicio, hora_fin, es_semanal, cancha_id, profesor:perfiles_usuarios!profesor_id(nombre, apellido)')
+          .select('id, fecha, hora_inicio, hora_fin, cancha_id, profesor:perfiles_usuarios!profesor_id(nombre)')
           .in('cancha_id', canchasIds);
         setAgendaClases(clases || []);
 
-        const { data: alquileres } = await supabase
+        const tzOffset = new Date().getTimezoneOffset() * 60000;
+        const sevenDaysAgo = new Date(Date.now() - tzOffset - 7 * 24 * 60 * 60 * 1000);
+        const sevenDaysAgoStr = sevenDaysAgo.toISOString().split('T')[0];
+
+        const { data: alqRecientes, error: alqErr } = await supabase
           .from('alquileres_cancha')
-          .select('id, fecha, hora_inicio, hora_fin, cancha_id, es_semanal, usuario:perfiles_usuarios!usuario_id(nombre, apellido, rol)')
+          .select('id, fecha, hora_inicio, hora_fin, cancha_id, es_semanal, usuario:perfiles_usuarios!usuario_id(nombre, rol)')
           .in('cancha_id', canchasIds)
-          .in('estado_pago', ['Aprobado', 'Pendiente']);
-        setAgendaAlquileres(alquileres || []);
+          .in('estado_pago', ['Aprobado', 'Pendiente'])
+          .gte('fecha', sevenDaysAgoStr);
+          
+        const { data: alqSemanales } = await supabase
+          .from('alquileres_cancha')
+          .select('id, fecha, hora_inicio, hora_fin, cancha_id, es_semanal, usuario:perfiles_usuarios!usuario_id(nombre, rol)')
+          .in('cancha_id', canchasIds)
+          .in('estado_pago', ['Aprobado', 'Pendiente'])
+          .eq('es_semanal', true)
+          .lt('fecha', sevenDaysAgoStr);
+
+        const alquileres = [...(alqRecientes || []), ...(alqSemanales || [])];
+        setAgendaAlquileres(alquileres);
+        setDebugInfo(`Canchas: ${canchasIds.join(',')}, Alq count: ${alquileres.length}, Err: ${alqErr?.message || 'none'}`);
       }
     } catch (err) {
       console.error("Error cargando datos:", err);
@@ -382,7 +399,9 @@ export default function GestionCanchasPage() {
         {/* Header y Acciones */}
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4">
           <div>
-            <h1 className="text-3xl font-black tracking-tight">Gestión de Canchas</h1>
+            <h1 className="text-2xl font-bold text-foreground">Canchas</h1>
+            <p className="text-sm text-muted-foreground">{canchas.length} canchas</p>
+            <p className="text-xs text-red-500 font-mono mt-1">{`Alquileres: ${agendaAlquileres.length}, CanchasIds: ${canchas.map(c => c.id).length}`}</p>
             <p className="text-stone-500 dark:text-stone-400 mt-2">Administra el inventario, precios y disponibilidad horaria de tu club.</p>
           </div>
           {mainTab === 'gestion' && (
